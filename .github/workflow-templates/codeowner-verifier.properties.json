@@ -1,0 +1,8 @@
+{
+    "name": "nCino Codeowner Verifier workflow",
+    "description": "Validates the CODEOWNER file found in the .github directory. All modified files in a PR should have a functioning codeowner definition.",
+    "iconName": "plus-square",
+    "categories": [
+        "code-scanning"
+    ]
+}

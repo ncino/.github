@@ -1,0 +1,8 @@
+{
+    "name": "nCino Trufflehog Scan Workflow",
+    "description": "Scans changed files for alignment with nCino's defined Trufflehog configuration.",
+    "iconName": "eye-off",
+    "categories": [
+        "code-scanning"
+    ]
+}

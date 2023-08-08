@@ -1,0 +1,13 @@
+{
+    "name": "nCino Semantic Commit Analyzer Workflow",
+    "description": "Commit history analyzer starter workflow. Makes sure a semantic commit is included in the branch history.",
+    "iconName": "git-commit",
+    "categories": [
+        "ci",
+        "code-scanning",
+        "deployments"
+    ],
+    "filePatterns": [
+        "package.json$"
+    ]
+}
