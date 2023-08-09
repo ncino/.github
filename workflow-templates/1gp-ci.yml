@@ -1,0 +1,176 @@
+name: nCino Salesforce 1GP CI build
+on:
+    push:
+        branches:
+            - release
+
+    pull_request:
+        branches:
+            - release
+            
+    workflow_dispatch:
+      inputs:
+        CLEAN_ORG:
+          description: 'CLEAN_ORG - Input "true" to spin up a fresh org instead of pulling from orgfarm'
+          required: false
+          type: choice
+          default: "false"
+          options:
+            - true
+            - false
+
+    workflow_call:
+        inputs:
+            config-path:
+                required: true
+                type: string
+
+concurrency:
+    group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+    cancel-in-progress: true
+
+env:
+    BUILD_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+    COMMIT_SHA1: "${{ github.sha }}"
+    DD_AGENT_MAJOR_VERSION: "7"
+    DD_API_KEY: "${{ secrets.DD_API_KEY }}"
+    DD_APP_KEY: "${{ secrets.DD_APP_KEY }}"
+    DD_SITE: "datadoghq.com"
+    DEVOPS_SCRIPTS_PATH: "./ci-docker-images/images/ci-private-ubuntu/scripts"
+    DX_DELETE_SCRATCH_ORG: true
+    ENABLE_LINTING: "false"
+    GIT_BASE_BRANCH: "${{ github.base_ref }}"
+    GIT_BRANCH: "${{ github.ref_name }}"
+    GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+    REPO_NAME: "${{ github.event.repository.name }}"
+
+jobs:
+    CI-build-and-test:
+        runs-on: ubuntu-latest
+        defaults:
+          run:
+              shell: bash
+        steps:
+        # 🎬 Install Phase 🎬
+        - name: Create necessary directories
+          run: mkdir /tmp/testResults/
+
+        - name: Display Action's Environment Variables
+          run: env
+
+        - name: 🫥 Checkout force-matrix-manager 😐
+          uses: actions/checkout@v3
+          with:
+            token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+
+        - name: 🐳 Get DevOps Scripts 🐳
+          uses: actions/checkout@v3
+          with:            
+            token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+            repository: "ncino/ci-docker-images"
+            path: "ci-docker-images"
+
+        - name: 🐍 Setup Python 🐍
+          uses: actions/setup-python@v4
+          with:
+            python-version: '3.10'
+            cache: 'pip'
+            cache-dependency-path: |
+              ci-docker-images/Pipfile.lock
+
+        - name: 🪄 Install python repos 🧌
+          run: $DEVOPS_SCRIPTS_PATH/install_python_repos.sh
+
+        - name: 🍣 Setup Node 👌
+          uses: actions/setup-node@v3
+          with:
+            node-version-file: '.nvmrc'
+            cache: 'npm'
+
+        - name: Setup Github config for npm
+          run: |
+            printf "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN} \n" >> .npmrc
+            printf "@ncino:registry=https://npm.pkg.github.com/ncino" >> .npmrc
+          env:
+            GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+
+        - name: ☁️ Install SFDX and authenticate ☁️
+          run: $DEVOPS_SCRIPTS_PATH/install_sfdx_and_auth.sh
+          env:
+            DEV_HUB_AUTH_URL: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
+
+        - name: 👩‍🚀 Setup Log exports 👩‍🚀
+          run: source $DEVOPS_SCRIPTS_PATH/sfdx_and_node_version_export.sh
+
+        - name: 👍 Install Node Packages 👍
+          run: $DEVOPS_SCRIPTS_PATH/npm.sh ci --unsafe-perm
+
+        # 🥩🥔 Build Phase 🥩🥔
+        - name: 👩‍🔬 Confirms proper xml syntax for files under config/ 👨‍🏫
+          run: |
+            sudo apt-get update && sudo apt-get install libxml2-utils
+            find config -name '*.xml' -print0 | xargs -0 -n1 -r xmllint --noout
+
+        - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
+          run: $DEVOPS_SCRIPTS_PATH/npm.sh run test:unit
+
+        - name: 👷‍♀️ Validate destructive changes 👷‍♀️
+          run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
+
+        - name: 👨🏿‍🌾 Get orgfarm org 👨🏿‍🌾
+          run: orgfarm-request -c "$REPO_NAME"
+          env:
+            ORG_FARM_API_KEY: "${{ secrets.ORG_FARM_API_KEY }}"
+            ORGFARM_API_URL: "${{ vars.ORGFARM_API_URL }}"
+
+        - name: 🤠 Display Org 🔎
+          run: $DEVOPS_SCRIPTS_PATH/display_org.sh
+
+        - name: 🗣️ Run predependency script if org was created locally
+          run: |
+            if [[ -f /tmp/create_dx_local_check.txt ]] && [[ -f ./scripts/org_farm/pre_dependencies.sh ]]; then
+                ./scripts/org_farm/pre_dependencies.sh
+            fi
+
+        - name: 📦 Update SF package dependencies 📦
+          run: sfupdate
+
+        - name: 🫨 Reset source tracking for orgfarm orgs 🫨
+          run: $DEVOPS_SCRIPTS_PATH/reset_source_tracking_ci_org.sh
+
+        - name: 🚢 Deploy source 🚢
+          run: $DEVOPS_SCRIPTS_PATH/sfdx_source_push.sh
+
+        - name: 💼 Run sfencrypt if org created locally 💼
+          run: if [[ -f /tmp/create_dx_local_check.txt ]]; then sfencrypt; fi;
+
+        - name: 🤞 Run Apex unit tests 🤞
+          run: sfdxunittests -s src -o /tmp/testResults/junit.xml
+
+        # 🧹 Post-Build Cleanup Phase 🧹
+        - name: 💀 Delete the dx scratch org 💀
+          if: ${{ always() }}
+          run: $DEVOPS_SCRIPTS_PATH/delete_scratch_org.sh
+
+        # 🏁 Artifact Upload Phase 🏁
+        - name: 🧟‍♀️ Archive unit test artifacts 👩‍🚀
+          uses: actions/upload-artifact@v3
+          with:
+            name: Unit test files
+            path: /tmp/testResults/*
+
+        - name: 🧝‍♂️ Archive NPM logs 🧟‍♂️
+          uses: actions/upload-artifact@v3
+          with:
+            name: npm installation logs
+            path: npm_ci.log
+
+        - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
+          if: github.ref_name == 'release'
+          uses: ncino/github-aws-actions/s3_trigger_pipeline@v1
+          with:
+            awsAccessKeyId: ${{ secrets.TEST_AWS_ACCESS_KEY_GITHUB_CMITZEL }}
+            awsSecretAccessKey: ${{ secrets.TEST_AWS_SECRET_ACCESS_KEY_GITHUB_CMITZEL }}
+
+        - name: 👏 Success Message 👏
+          run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt

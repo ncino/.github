@@ -1,0 +1,8 @@
+{
+    "name": "nCino Salesforce 1GP CI Pipeline workflow",
+    "description": "Starter workflow for a 1GP Salesforce packaging CI pipeline",
+    "iconName": "plus-square",
+    "categories": [
+        "code-scanning"
+    ]
+}
