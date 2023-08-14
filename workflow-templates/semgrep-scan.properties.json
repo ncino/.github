@@ -1,8 +1,0 @@
-{
-    "name": "nCino Semgrep Scan Workflow",
-    "description": "Scans changed files for alignment with nCino's defined semgrep ruleset.",
-    "iconName": "scissors",
-    "categories": [
-        "code-scanning"
-    ]
-}
