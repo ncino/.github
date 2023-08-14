@@ -135,14 +135,11 @@ jobs:
         - name: 📦 Update SF package dependencies 📦
           run: sfupdate
 
-        - name: 🫨 Reset source tracking for orgfarm orgs 🫨
-          run: $DEVOPS_SCRIPTS_PATH/reset_source_tracking_ci_org.sh
-
         - name: 🚢 Deploy source 🚢
           run: $DEVOPS_SCRIPTS_PATH/sfdx_source_push.sh
 
         - name: 💼 Run sfencrypt if org created locally 💼
-          run: if [[ -f /tmp/create_dx_local_check.txt ]]; then sfencrypt; fi;
+          run: sfencrypt
 
         - name: 🤞 Run Apex unit tests 🤞
           run: sfdxunittests -s src -o /tmp/testResults/junit.xml
