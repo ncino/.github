@@ -41,7 +41,7 @@ env:
     ENABLE_LINTING: "false"
     GIT_BASE_BRANCH: "${{ github.base_ref }}"
     GIT_BRANCH: "${{ github.ref_name }}"
-    GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+    GITHUB_TOKEN: "${{ secrets.TOKEN }}"
     REPO_NAME: "${{ github.event.repository.name }}"
 
 jobs:
@@ -61,12 +61,12 @@ jobs:
         - name: 🫥 Checkout force-matrix-manager 😐
           uses: actions/checkout@v3
           with:
-            token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+            token: "${{ secrets.TOKEN }}"
 
         - name: 🐳 Get DevOps Scripts 🐳
           uses: actions/checkout@v3
           with:            
-            token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+            token: "${{ secrets.TOKEN }}"
             repository: "ncino/ci-docker-images"
             path: "ci-docker-images"
 
@@ -87,17 +87,8 @@ jobs:
             node-version-file: '.nvmrc'
             cache: 'npm'
 
-        - name: Setup Github config for npm
-          run: |
-            printf "//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN} \n" >> .npmrc
-            printf "@ncino:registry=https://npm.pkg.github.com/ncino" >> .npmrc
-          env:
-            GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
-
         - name: ☁️ Install SFDX and authenticate ☁️
           run: $DEVOPS_SCRIPTS_PATH/install_sfdx_and_auth.sh
-          env:
-            DEV_HUB_AUTH_URL: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
 
         - name: 👩‍🚀 Setup Log exports 👩‍🚀
           run: source $DEVOPS_SCRIPTS_PATH/sfdx_and_node_version_export.sh
@@ -119,9 +110,6 @@ jobs:
 
         - name: 👨🏿‍🌾 Get orgfarm org 👨🏿‍🌾
           run: orgfarm-request -c "$REPO_NAME"
-          env:
-            ORG_FARM_API_KEY: "${{ secrets.ORG_FARM_API_KEY }}"
-            ORGFARM_API_URL: "${{ vars.ORGFARM_API_URL }}"
 
         - name: 🤠 Display Org 🔎
           run: $DEVOPS_SCRIPTS_PATH/display_org.sh
