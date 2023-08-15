@@ -164,10 +164,7 @@ jobs:
 
         - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
           if: github.ref_name == 'release'
-          uses: ncino/github-aws-actions/s3_trigger_pipeline@v1
-          with:
-            awsAccessKeyId: ${{ secrets.TEST_AWS_ACCESS_KEY_GITHUB_CMITZEL }}
-            awsSecretAccessKey: ${{ secrets.TEST_AWS_SECRET_ACCESS_KEY_GITHUB_CMITZEL }}
+          uses: ncino/github-aws-actions/s3_trigger_pipeline@v2
 
         - name: 👏 Success Message 👏
           run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt
