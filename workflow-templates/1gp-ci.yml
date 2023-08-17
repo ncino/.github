@@ -122,6 +122,8 @@ jobs:
         - name: 👩‍🌾 Get orgfarm org 👨‍🌾
           run: orgfarm-request -c "$REPO_NAME"
           env:
+            ORG_FARM_API_KEY: "${{ secrets.ORG_FARM_API_KEY }}"
+            ORGFARM_API_URL: "${{ vars.ORGFARM_API_URL }}"
 
         - name: 🤠 Display Org 🔎
           run: $DEVOPS_SCRIPTS_PATH/display_org.sh
