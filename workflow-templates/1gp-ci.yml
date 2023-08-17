@@ -1,4 +1,4 @@
-name: {{REPLACE_REPO_NAME}} Manager CI build
+name: {{REPLACE_REPO_NAME}} 1GP CI build
 on:
   push:
     branches:
@@ -64,7 +64,7 @@ jobs:
         - name: Display Action's Environment Variables
           run: env
 
-        - name: 🫥 Checkout force-matrix-manager 😐
+        - name: 🫥 Checkout {{REPLACE_REPO_NAME}} 😐
           uses: actions/checkout@v3
           with:
             token: "${{REPLACE_TOKEN_SECRET}}"
