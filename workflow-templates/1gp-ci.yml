@@ -1,33 +1,39 @@
-name: nCino Salesforce 1GP CI build
+name: {{REPLACE_REPO_NAME}} Manager CI build
 on:
-    push:
-        branches:
-            - release
+  push:
+    branches:
+      - release
 
-    pull_request:
-        branches:
-            - release
-            
-    workflow_dispatch:
-      inputs:
-        CLEAN_ORG:
-          description: 'CLEAN_ORG - Input "true" to spin up a fresh org instead of pulling from orgfarm'
-          required: false
-          type: choice
-          default: "false"
-          options:
-            - true
-            - false
+  pull_request:
+    branches:
+      - release
 
-    workflow_call:
-        inputs:
-            config-path:
-                required: true
-                type: string
+  workflow_dispatch:
+    inputs:
+      CLEAN_ORG:
+        description: 'CLEAN_ORG - Input "true" to spin up a fresh org instead of pulling from orgfarm'
+        required: false
+        type: boolean
+        default: false
+      PRESERVE_ORG:
+        description: 'PRESERVE_ORG - Input "true" to preserve the org after the workflow completes. Auth Information is stored in the build artifacts.'
+        required: false
+        type: boolean
+        default: false
+
+  workflow_call:
+    inputs:
+      config-path:
+        required: true
+        type: string
 
 concurrency:
     group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
     cancel-in-progress: true
+
+permissions:
+  id-token: write # This is required for requesting the ID token for AWS actions
+  contents: read  # This is required for actions/checkout
 
 env:
     BUILD_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
@@ -41,7 +47,7 @@ env:
     ENABLE_LINTING: "false"
     GIT_BASE_BRANCH: "${{ github.base_ref }}"
     GIT_BRANCH: "${{ github.ref_name }}"
-    GITHUB_TOKEN: "${{ secrets.TOKEN }}"
+    GITHUB_TOKEN: "${{REPLACE_TOKEN_SECRET}}"
     REPO_NAME: "${{ github.event.repository.name }}"
 
 jobs:
@@ -61,12 +67,12 @@ jobs:
         - name: 🫥 Checkout force-matrix-manager 😐
           uses: actions/checkout@v3
           with:
-            token: "${{ secrets.TOKEN }}"
+            token: "${{REPLACE_TOKEN_SECRET}}"
 
         - name: 🐳 Get DevOps Scripts 🐳
           uses: actions/checkout@v3
           with:            
-            token: "${{ secrets.TOKEN }}"
+            token: "${{REPLACE_TOKEN_SECRET}}"
             repository: "ncino/ci-docker-images"
             path: "ci-docker-images"
 
@@ -81,6 +87,9 @@ jobs:
         - name: 🪄 Install python repos 🧌
           run: $DEVOPS_SCRIPTS_PATH/install_python_repos.sh
 
+        - name: 📇 Configure .npmrc file 📜
+          run: $DEVOPS_SCRIPTS_PATH/npm_auth
+
         - name: 🍣 Setup Node 👌
           uses: actions/setup-node@v3
           with:
@@ -89,6 +98,8 @@ jobs:
 
         - name: ☁️ Install SFDX and authenticate ☁️
           run: $DEVOPS_SCRIPTS_PATH/install_sfdx_and_auth.sh
+          env:
+            DEV_HUB_AUTH_URL: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
 
         - name: 👩‍🚀 Setup Log exports 👩‍🚀
           run: source $DEVOPS_SCRIPTS_PATH/sfdx_and_node_version_export.sh
@@ -108,8 +119,9 @@ jobs:
         - name: 👷‍♀️ Validate destructive changes 👷‍♀️
           run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
 
-        - name: 👨🏿‍🌾 Get orgfarm org 👨🏿‍🌾
+        - name: 👩‍🌾 Get orgfarm org 👨‍🌾
           run: orgfarm-request -c "$REPO_NAME"
+          env:
 
         - name: 🤠 Display Org 🔎
           run: $DEVOPS_SCRIPTS_PATH/display_org.sh
@@ -134,21 +146,27 @@ jobs:
 
         # 🧹 Post-Build Cleanup Phase 🧹
         - name: 💀 Delete the dx scratch org 💀
-          if: ${{ always() }}
+          if: inputs.PRESERVE_ORG == false
           run: $DEVOPS_SCRIPTS_PATH/delete_scratch_org.sh
 
         # 🏁 Artifact Upload Phase 🏁
         - name: 🧟‍♀️ Archive unit test artifacts 👩‍🚀
           uses: actions/upload-artifact@v3
           with:
-            name: Unit test files
+            name: Unit Test Files
             path: /tmp/testResults/*
 
         - name: 🧝‍♂️ Archive NPM logs 🧟‍♂️
           uses: actions/upload-artifact@v3
           with:
-            name: npm installation logs
+            name: NPM Installation Logs
             path: npm_ci.log
+
+        - name: 📩 Upload Scratch Org Authentication Information 📨
+          uses: actions/upload-artifact@v3
+          with: 
+            name: Scratch Org Authentication Information
+            path: auth.key
 
         - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
           if: github.ref_name == 'release'
