@@ -105,7 +105,7 @@ jobs:
           run: source $DEVOPS_SCRIPTS_PATH/sfdx_and_node_version_export.sh
 
         - name: 👍 Install Node Packages 👍
-          run: $DEVOPS_SCRIPTS_PATH/npm.sh ci --unsafe-perm
+          run: npm ci --unsafe-perm
 
         # 🥩🥔 Build Phase 🥩🥔
         - name: 👩‍🔬 Confirms proper xml syntax for files under config/ 👨‍🏫
@@ -114,7 +114,7 @@ jobs:
             find config -name '*.xml' -print0 | xargs -0 -n1 -r xmllint --noout
 
         - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
-          run: $DEVOPS_SCRIPTS_PATH/npm.sh run test:unit
+          run: npm run test:unit
 
         - name: 👷‍♀️ Validate destructive changes 👷‍♀️
           run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
