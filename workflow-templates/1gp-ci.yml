@@ -42,7 +42,7 @@ env:
     DD_API_KEY: "${{ REPLACE_DD_API_SECRET }}"
     DD_APP_KEY: "${{ REPLACE_DD_APP_SECRET }}"
     DD_SITE: "datadoghq.com"
-    DEVOPS_SCRIPTS_PATH: "./ci-docker-images/images/ci-private-ubuntu/scripts"
+    DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
     DX_DELETE_SCRATCH_ORG: true
     ENABLE_LINTING: "false"
     GIT_BASE_BRANCH: "${{ github.base_ref }}"
@@ -73,8 +73,8 @@ jobs:
           uses: actions/checkout@v3
           with:            
             token: "${{REPLACE_TOKEN_SECRET}}"
-            repository: "ncino/ci-docker-images"
-            path: "ci-docker-images"
+            repository: "ncino/devops-utility-belt"
+            path: "devops-utility-belt"
 
         - name: 🐍 Setup Python 🐍
           uses: actions/setup-python@v4
@@ -82,7 +82,7 @@ jobs:
             python-version: '3.10'
             cache: 'pip'
             cache-dependency-path: |
-              ci-docker-images/Pipfile.lock
+              devops-utility-belt/Pipfile.lock
 
         - name: 🪄 Install python repos 🧌
           run: $DEVOPS_SCRIPTS_PATH/install_python_repos.sh
@@ -157,12 +157,6 @@ jobs:
           with:
             name: Unit Test Files
             path: /tmp/testResults/*
-
-        - name: 🧝‍♂️ Archive NPM logs 🧟‍♂️
-          uses: actions/upload-artifact@v3
-          with:
-            name: NPM Installation Logs
-            path: npm_ci.log
 
         - name: 📩 Upload Scratch Org Authentication Information 📨
           uses: actions/upload-artifact@v3
