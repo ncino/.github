@@ -39,8 +39,8 @@ env:
     BUILD_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
     COMMIT_SHA1: "${{ github.sha }}"
     DD_AGENT_MAJOR_VERSION: "7"
-    DD_API_KEY: "${{ secrets.DD_API_KEY }}"
-    DD_APP_KEY: "${{ secrets.DD_APP_KEY }}"
+    DD_API_KEY: "${{ REPLACE_DD_API_SECRET }}"
+    DD_APP_KEY: "${{ REPLACE_DD_APP_SECRET }}"
     DD_SITE: "datadoghq.com"
     DEVOPS_SCRIPTS_PATH: "./ci-docker-images/images/ci-private-ubuntu/scripts"
     DX_DELETE_SCRATCH_ORG: true
@@ -88,7 +88,7 @@ jobs:
           run: $DEVOPS_SCRIPTS_PATH/install_python_repos.sh
 
         - name: 📇 Configure .npmrc file 📜
-          run: $DEVOPS_SCRIPTS_PATH/npm_auth
+          run: $DEVOPS_SCRIPTS_PATH/npm_auth.sh
 
         - name: 🍣 Setup Node 👌
           uses: actions/setup-node@v3
@@ -122,6 +122,8 @@ jobs:
         - name: 👩‍🌾 Get orgfarm org 👨‍🌾
           run: orgfarm-request -c "$REPO_NAME"
           env:
+            ORG_FARM_API_KEY: "${{ secrets.ORG_FARM_API_KEY }}"
+            ORGFARM_API_URL: "${{ vars.ORGFARM_API_URL }}"
 
         - name: 🤠 Display Org 🔎
           run: $DEVOPS_SCRIPTS_PATH/display_org.sh
