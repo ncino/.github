@@ -99,7 +99,7 @@ jobs:
         - name: ☁️ Install SFDX and authenticate ☁️
           run: $DEVOPS_SCRIPTS_PATH/install_sfdx_and_auth.sh
           env:
-            DEV_HUB_AUTH_URL: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
+            DEV_HUB_AUTH_URL: ${{REPLACE_DEV_HUB_SECRET}}
 
         - name: 👩‍🚀 Setup Log exports 👩‍🚀
           run: source $DEVOPS_SCRIPTS_PATH/sfdx_and_node_version_export.sh
@@ -122,8 +122,8 @@ jobs:
         - name: 👩‍🌾 Get orgfarm org 👨‍🌾
           run: orgfarm-request -c "$REPO_NAME"
           env:
-            ORG_FARM_API_KEY: "${{ secrets.ORG_FARM_API_KEY }}"
-            ORGFARM_API_URL: "${{ vars.ORGFARM_API_URL }}"
+            ORG_FARM_API_KEY: "${{REPLACE_ORGFARM_KEY_SECRET}}"
+            ORGFARM_API_URL: "${{REPLACE_ORGFARM_URL_SECRET}}"
 
         - name: 🤠 Display Org 🔎
           run: $DEVOPS_SCRIPTS_PATH/display_org.sh
