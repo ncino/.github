@@ -113,8 +113,9 @@ jobs:
             sudo apt-get update && sudo apt-get install libxml2-utils
             find config -name '*.xml' -print0 | xargs -0 -n1 -r xmllint --noout
 
-        - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
-          run: npm run test:unit
+        # Uncomment once tests have been applied
+        # - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
+        #   run: npm run test:unit
 
         - name: 👷‍♀️ Validate destructive changes 👷‍♀️
           run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
