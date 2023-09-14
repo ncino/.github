@@ -148,7 +148,7 @@ jobs:
 
         # 🧹 Post-Build Cleanup Phase 🧹
         - name: 💀 Delete the dx scratch org 💀
-          if: inputs.PRESERVE_ORG == false
+          if: inputs.PRESERVE_ORG == false && always()
           run: $DEVOPS_SCRIPTS_PATH/delete_scratch_org.sh
 
         # 🏁 Artifact Upload Phase 🏁
