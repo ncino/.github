@@ -167,7 +167,7 @@ jobs:
 
         - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
           if: github.ref_name == 'release'
-          uses: ncino/actions-aws/s3_trigger_pipeline@v2
+          uses: ncino/action-aws/s3_trigger_pipeline@v2
 
         - name: 👏 Success Message 👏
           run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt
