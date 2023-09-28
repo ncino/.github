@@ -61,9 +61,6 @@ jobs:
         - name: Create necessary directories
           run: mkdir /tmp/testResults/
 
-        - name: Display Action's Environment Variables
-          run: env
-
         - name: 🫥 Checkout {{REPLACE_REPO_NAME}} 😐
           uses: actions/checkout@v3
           with:
