@@ -104,6 +104,10 @@ jobs:
         - name: 👍 Install Node Packages 👍
           run: npm ci --unsafe-perm
 
+        # Uncomment if you have Angular or AngularJS jest tests
+        # - name: 🧪 Run Angular Tests 🧪
+        #   run: npm run test
+
         # 🥩🥔 Build Phase 🥩🥔
         - name: 👩‍🔬 Confirms proper xml syntax for files under config/ 👨‍🏫
           run: |
@@ -111,6 +115,7 @@ jobs:
             find config -name '*.xml' -print0 | xargs -0 -n1 -r xmllint --noout
 
         # Uncomment once tests have been applied
+        # Some repos may need to change this to test:lwc
         # - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
         #   run: npm run test:unit
 
