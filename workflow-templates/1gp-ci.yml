@@ -153,6 +153,9 @@ jobs:
         - name: 💀 Delete the dx scratch org 💀
           if: inputs.PRESERVE_ORG == false && always()
           run: $DEVOPS_SCRIPTS_PATH/delete_scratch_org.sh
+          env:
+            ORG_FARM_API_KEY: "${{REPLACE_ORGFARM_KEY_SECRET}}"
+            ORGFARM_API_URL: "${{REPLACE_ORGFARM_URL_SECRET}}"
 
         # 🏁 Artifact Upload Phase 🏁
         - name: 🧟‍♀️ Archive unit test artifacts 👩‍🚀
