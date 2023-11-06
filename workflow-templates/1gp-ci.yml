@@ -58,57 +58,24 @@ jobs:
               shell: bash
         steps:
         # 🎬 Install Phase 🎬
-        - name: Create necessary directories
-          run: mkdir /tmp/testResults/
-
-        - name: 🫥 Checkout {{REPLACE_REPO_NAME}} 😐
-          uses: actions/checkout@v3
+        - name: 🗃️ Checkout Repo 🗃️
+          uses: actions/checkout@v4
           with:
-            token: "${{REPLACE_TOKEN_SECRET}}"
+            token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+            ref: ${{ inputs.ref }}
 
-        - name: 🐳 Get DevOps Scripts 🐳
-          uses: actions/checkout@v3
-          with:            
-            token: "${{REPLACE_TOKEN_SECRET}}"
-            repository: "ncino/devops-utility-belt"
-            path: "devops-utility-belt"
-
-        - name: 🐍 Setup Python 🐍
-          uses: actions/setup-python@v4
+        - name: 🛠️ Force Repository Setup 🛠️
+          uses: ncino/action-force-setup@v2
           with:
-            python-version: '3.10'
-            cache: 'pip'
-            cache-dependency-path: |
-              devops-utility-belt/Pipfile.lock
-
-        - name: 🪄 Install python repos 🧌
-          run: $DEVOPS_SCRIPTS_PATH/install_python_repos.sh
-
-        - name: 📇 Configure .npmrc file 📜
-          run: $DEVOPS_SCRIPTS_PATH/npm_auth.sh
-
-        - name: 🍣 Setup Node 👌
-          uses: actions/setup-node@v3
-          with:
-            node-version-file: '.nvmrc'
-            cache: 'npm'
-
-        - name: ☁️ Install SFDX and authenticate ☁️
-          run: $DEVOPS_SCRIPTS_PATH/install_sfdx_and_auth.sh
-          env:
-            DEV_HUB_AUTH_URL: ${{REPLACE_DEV_HUB_SECRET}}
-
-        - name: 👩‍🚀 Setup Log exports 👩‍🚀
-          run: source $DEVOPS_SCRIPTS_PATH/sfdx_and_node_version_export.sh
-
-        - name: 👍 Install Node Packages 👍
-          run: npm ci --unsafe-perm
+            dev-hub-auth-url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}" 
+            ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
+            ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
+            git-committer-name: ci-ncino
+            git-committer-email: pdedevops@ncino.com
 
         # 🥩🥔 Build Phase 🥩🥔
-        - name: 👩‍🔬 Confirms proper xml syntax for files under config/ 👨‍🏫
-          run: |
-            sudo apt-get update && sudo apt-get install libxml2-utils
-            find config -name '*.xml' -print0 | xargs -0 -n1 -r xmllint --noout
+        - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
+          uses: ncino/action-validate-xml@v1
 
         # Uncomment if you have Angular or AngularJS jest tests
         # - name: 🧪 Run Angular Tests 🧪
@@ -123,55 +90,35 @@ jobs:
           run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
 
         - name: 👩‍🌾 Get orgfarm org 👨‍🌾
-          run: orgfarm-request -c "$REPO_NAME"
+          id: setup-org
+          uses: ncino/action-org-setup/org-provision-action@v2
           env:
             ORG_FARM_API_KEY: "${{REPLACE_ORGFARM_KEY_SECRET}}"
             ORGFARM_API_URL: "${{REPLACE_ORGFARM_URL_SECRET}}"
+            clean-org: ${{ inputs.clean-org }}
+            github_token: ${{REPLACE_TOKEN_SECRET}}
+            capability: "{{REPLACE_REPO_NAME}}"
 
-        - name: 🤠 Display Org 🔎
-          run: $DEVOPS_SCRIPTS_PATH/display_org.sh
+        - name: 🚢 Deploy source and encrypt 💼
+          uses: ncino/action-org-setup/org-source-push-action@v2
 
-        - name: 🗣️ Run predependency script if org was created locally
-          run: |
-            if [[ -f /tmp/create_dx_local_check.txt ]] && [[ -f ./scripts/org_farm/pre_dependencies.sh ]]; then
-                ./scripts/org_farm/pre_dependencies.sh
-            fi
-
-        - name: 📦 Update SF package dependencies 📦
-          run: sfupdate
-
-        - name: 🚢 Deploy source 🚢
-          run: $DEVOPS_SCRIPTS_PATH/sfdx_source_push.sh
-
-        - name: 💼 Run sfencrypt if org created locally 💼
-          run: sfencrypt
-
-        - name: 🤞 Run Apex unit tests 🤞
-          run: sfdxunittests -s src -o /tmp/testResults/junit.xml
+        - name: 🤞 Force Apex Tests 🤞
+          uses: ncino/action-force-apex-tests@v1
+          with:
+            dev_hub_auth_url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}"
 
         # 🧹 Post-Build Cleanup Phase 🧹
-        - name: 💀 Delete the dx scratch org 💀
-          if: inputs.PRESERVE_ORG == false && always()
-          run: $DEVOPS_SCRIPTS_PATH/delete_scratch_org.sh
-          env:
-            ORG_FARM_API_KEY: "${{REPLACE_ORGFARM_KEY_SECRET}}"
-            ORGFARM_API_URL: "${{REPLACE_ORGFARM_URL_SECRET}}"
+        - name: 🧹 Post Build Cleanup 🧹
+          if: ${{ steps.setup-org.outcome != 'skipped' && always() }}
+          uses: ncino/action-org-setup/org-cleanup-action@v1
+          with:
+            orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
+            orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
+            preserve-org: "${{ inputs.PRESERVE_ORG }}"
 
         # 🏁 Artifact Upload Phase 🏁
-        - name: 🧟‍♀️ Archive unit test artifacts 👩‍🚀
-          uses: actions/upload-artifact@v3
-          with:
-            name: Unit Test Files
-            path: /tmp/testResults/*
-
-        - name: 📩 Upload Scratch Org Authentication Information 📨
-          uses: actions/upload-artifact@v3
-          with: 
-            name: Scratch Org Authentication Information
-            path: auth.key
-
         - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
-          if: github.ref_name == 'release'
+          if: ${{ github.ref_name == 'release' }}
           uses: ncino/action-aws/s3_trigger_pipeline@v2
 
         - name: 👏 Success Message 👏
