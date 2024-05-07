@@ -1,4 +1,4 @@
-name: {{REPLACE_REPO_NAME}} 1GP CI build
+name: 1GP CI build
 on:
   push:
     branches:
@@ -28,97 +28,97 @@ on:
         type: string
 
 concurrency:
-    group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
-    cancel-in-progress: true
+  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
+  cancel-in-progress: true
 
 permissions:
   id-token: write # This is required for requesting the ID token for AWS actions
-  contents: read  # This is required for actions/checkout
+  contents: read # This is required for actions/checkout
 
 env:
-    BUILD_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-    COMMIT_SHA1: "${{ github.sha }}"
-    DD_AGENT_MAJOR_VERSION: "7"
-    DD_API_KEY: "${{ REPLACE_DD_API_SECRET }}"
-    DD_APP_KEY: "${{ REPLACE_DD_APP_SECRET }}"
-    DD_SITE: "datadoghq.com"
-    DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
-    DX_DELETE_SCRATCH_ORG: true
-    ENABLE_LINTING: "false"
-    GIT_BASE_BRANCH: "${{ github.base_ref }}"
-    GIT_BRANCH: "${{ github.ref_name }}"
-    GITHUB_TOKEN: "${{ REPLACE_TOKEN_SECRET }}"
-    REPO_NAME: "${{ github.event.repository.name }}"
+  BUILD_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+  COMMIT_SHA1: "${{ github.sha }}"
+  DD_AGENT_MAJOR_VERSION: "7"
+  DD_API_KEY: "${{ REPLACE_DD_API_SECRET }}"
+  DD_APP_KEY: "${{ REPLACE_DD_APP_SECRET }}"
+  DD_SITE: "datadoghq.com"
+  DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
+  DX_DELETE_SCRATCH_ORG: true
+  ENABLE_LINTING: "false"
+  GIT_BASE_BRANCH: "${{ github.base_ref }}"
+  GIT_BRANCH: "${{ github.ref_name }}"
+  GITHUB_TOKEN: "${{ REPLACE_TOKEN_SECRET }}"
+  REPO_NAME: "${{ github.event.repository.name }}"
 
 jobs:
-    CI-build-and-test:
-        runs-on: ubuntu-latest
-        defaults:
-          run:
-              shell: bash
-        steps:
-        # 🎬 Install Phase 🎬
-        - name: 🗃️ Checkout Repo 🗃️
-          uses: actions/checkout@v4
-          with:
-            token: "${{ REPLACE_TOKEN_SECRET }}"
-            ref: ${{ inputs.ref }}
+  CI-build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # 🎬 Install Phase 🎬
+      - name: 🗃️ Checkout Repo 🗃️
+        uses: actions/checkout@v4
+        with:
+          token: "${{ REPLACE_TOKEN_SECRET }}"
+          ref: ${{ inputs.ref }}
 
-        - name: 🛠️ Force Repository Setup 🛠️
-          uses: ncino/action-force-setup@v2
-          with:
-            dev-hub-auth-url: "${{ REPLACE_DEVHUB_URL_SECRET }}" 
-            ci-ncino-ssh-private-signing-key: ${{ REPLACE_SSH_PRIVATE_SIGNING_KEY_SECRET }}
-            ci-ncino-ssh-public-signing-key: ${{ REPLACE_SSH_PUBLIC_SIGNING_KEY_SECRET }}
-            git-committer-name: ci-ncino
-            git-committer-email: pdedevops@ncino.com
+      - name: 🛠️ Force Repository Setup 🛠️
+        uses: ncino/action-force-setup@v2
+        with:
+          dev-hub-auth-url: "${{ REPLACE_DEVHUB_URL_SECRET }}"
+          ci-ncino-ssh-private-signing-key: ${{ REPLACE_SSH_PRIVATE_SIGNING_KEY_SECRET }}
+          ci-ncino-ssh-public-signing-key: ${{ REPLACE_SSH_PUBLIC_SIGNING_KEY_SECRET }}
+          git-committer-name: ci-ncino
+          git-committer-email: pdedevops@ncino.com
 
-        # 🥩🥔 Build Phase 🥩🥔
-        - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
-          uses: ncino/action-validate-xml@v1
+      # 🥩🥔 Build Phase 🥩🥔
+      - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
+        uses: ncino/action-validate-xml@v1
 
-        # Uncomment if you have Angular or AngularJS jest tests
-        # - name: 🧪 Run Angular Tests 🧪
-        #   run: npm run test
+      # Uncomment if you have Angular or AngularJS jest tests
+      # - name: 🧪 Run Angular Tests 🧪
+      #   run: npm run test
 
-        # Uncomment once tests have been applied
-        # Some repos may need to change this to test:lwc
-        # - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
-        #   run: npm run test:unit
+      # Uncomment once tests have been applied
+      # Some repos may need to change this to test:lwc
+      # - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
+      #   run: npm run test:unit
 
-        - name: 👷‍♀️ Validate destructive changes 👷‍♀️
-          run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
+      - name: 👷‍♀️ Validate destructive changes 👷‍♀️
+        run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
 
-        - name: 👩‍🌾 Get and Setup Org 👨‍🌾
-          id: setup-org
-          uses: ncino/action-org-setup/org-provision-action@v3
-          with:
-            capability:  {{ REPLACE_CAPABILITY_NAME }}
-            github-token: "${{ REPLACE_TOKEN_SECRET }}"
-            orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
-            orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
+      - name: 👩‍🌾 Get and Setup Org 👨‍🌾
+        id: setup-org
+        uses: ncino/action-org-setup/org-provision-action@v3
+        with:
+          capability: { { REPLACE_CAPABILITY_NAME } }
+          github-token: "${{ REPLACE_TOKEN_SECRET }}"
+          orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
+          orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
 
-        - name: 🚢 Deploy source and encrypt 💼
-          uses: ncino/action-org-setup/org-source-push-action@v2
+      - name: 🚢 Deploy source and encrypt 💼
+        uses: ncino/action-org-setup/org-source-push-action@v2
 
-        - name: 🤞 Force Apex Tests 🤞
-          uses: ncino/action-force-apex-tests@v3
-          with:
-            auth-url: ${{ steps.setup-org.outputs.auth_url }}
+      - name: 🤞 Force Apex Tests 🤞
+        uses: ncino/action-force-apex-tests@v3
+        with:
+          auth-url: ${{ steps.setup-org.outputs.auth_url }}
 
-        # 🧹 Post-Build Cleanup Phase 🧹
-        - name: 🧹 Post Build Cleanup 🧹
-          if: ${{ steps.setup-org.outcome != 'skipped' && always() }}
-          uses: ncino/action-org-setup/org-cleanup-action@v1
-          with:
-            orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
-            orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
-            preserve-org: "${{ inputs.PRESERVE_ORG }}"
+      # 🧹 Post-Build Cleanup Phase 🧹
+      - name: 🧹 Post Build Cleanup 🧹
+        if: ${{ steps.setup-org.outcome != 'skipped' && always() }}
+        uses: ncino/action-org-setup/org-cleanup-action@v1
+        with:
+          orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
+          orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
+          preserve-org: "${{ inputs.PRESERVE_ORG }}"
 
-        # 🏁 Artifact Upload Phase 🏁
-        - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
-          if: ${{ github.ref_name == 'release' }}
-          uses: ncino/action-aws/s3_trigger_pipeline@v2
+      # 🏁 Artifact Upload Phase 🏁
+      - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
+        if: ${{ github.ref_name == 'release' }}
+        uses: ncino/action-aws/s3_trigger_pipeline@v2
 
-        - name: 👏 Success Message 👏
-          run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt
+      - name: 👏 Success Message 👏
+        run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt
