@@ -121,4 +121,5 @@ jobs:
         uses: ncino/action-aws/s3_trigger_pipeline@v2
 
       - name: 👏 Success Message 👏
+        if: ${{ success() }}
         run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt
