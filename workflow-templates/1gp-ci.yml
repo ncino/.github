@@ -29,7 +29,7 @@ on:
 
 concurrency:
   group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
 
 permissions:
   id-token: write # This is required for requesting the ID token for AWS actions
