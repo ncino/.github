@@ -24,7 +24,7 @@ on:
   workflow_call:
     inputs:
       config-path:
-        required: true
+        required: false
         type: string
 
 concurrency:
@@ -47,7 +47,7 @@ env:
     ENABLE_LINTING: "false"
     GIT_BASE_BRANCH: "${{ github.base_ref }}"
     GIT_BRANCH: "${{ github.ref_name }}"
-    GITHUB_TOKEN: "${{REPLACE_TOKEN_SECRET}}"
+    GITHUB_TOKEN: "${{ REPLACE_TOKEN_SECRET }}"
     REPO_NAME: "${{ github.event.repository.name }}"
 
 jobs:
@@ -61,15 +61,15 @@ jobs:
         - name: 🗃️ Checkout Repo 🗃️
           uses: actions/checkout@v4
           with:
-            token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+            token: "${{ REPLACE_TOKEN_SECRET }}"
             ref: ${{ inputs.ref }}
 
         - name: 🛠️ Force Repository Setup 🛠️
           uses: ncino/action-force-setup@v2
           with:
-            dev-hub-auth-url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}" 
-            ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
-            ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
+            dev-hub-auth-url: "${{ REPLACE_DEVHUB_URL_SECRET }}" 
+            ci-ncino-ssh-private-signing-key: ${{ REPLACE_SSH_PRIVATE_SIGNING_KEY_SECRET }}
+            ci-ncino-ssh-public-signing-key: ${{ REPLACE_SSH_PUBLIC_SIGNING_KEY_SECRET }}
             git-committer-name: ci-ncino
             git-committer-email: pdedevops@ncino.com
 
@@ -89,31 +89,30 @@ jobs:
         - name: 👷‍♀️ Validate destructive changes 👷‍♀️
           run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
 
-        - name: 👩‍🌾 Get orgfarm org 👨‍🌾
+        - name: 👩‍🌾 Get and Setup Org 👨‍🌾
           id: setup-org
-          uses: ncino/action-org-setup/org-provision-action@v2
-          env:
-            ORG_FARM_API_KEY: "${{REPLACE_ORGFARM_KEY_SECRET}}"
-            ORGFARM_API_URL: "${{REPLACE_ORGFARM_URL_SECRET}}"
-            clean-org: ${{ inputs.clean-org }}
-            github_token: ${{REPLACE_TOKEN_SECRET}}
-            capability: "{{REPLACE_REPO_NAME}}"
+          uses: ncino/action-org-setup/org-provision-action@v3
+          with:
+            capability:  {{ REPLACE_CAPABILITY_NAME }}
+            github-token: "${{ REPLACE_TOKEN_SECRET }}"
+            orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
+            orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
 
         - name: 🚢 Deploy source and encrypt 💼
           uses: ncino/action-org-setup/org-source-push-action@v2
 
         - name: 🤞 Force Apex Tests 🤞
-          uses: ncino/action-force-apex-tests@v1
+          uses: ncino/action-force-apex-tests@v3
           with:
-            dev_hub_auth_url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}"
+            auth-url: ${{ steps.setup-org.outputs.auth_url }}
 
         # 🧹 Post-Build Cleanup Phase 🧹
         - name: 🧹 Post Build Cleanup 🧹
           if: ${{ steps.setup-org.outcome != 'skipped' && always() }}
           uses: ncino/action-org-setup/org-cleanup-action@v1
           with:
-            orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
             orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
+            orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
             preserve-org: "${{ inputs.PRESERVE_ORG }}"
 
         # 🏁 Artifact Upload Phase 🏁

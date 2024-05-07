@@ -1,4 +1,4 @@
-name: Commit Lint
+name: ✓ Commit Lint
 on:
     push:
         branches:
@@ -16,18 +16,18 @@ on:
                 type: string
         outputs:
             release:
-                description: 'Describes the highest level of semantic commit detected'
-                value: ${{ jobs.Commit-Lint.outputs.release }}
+                description: "Describes the highest level of semantic commit detected"
+                value: ${ jobs.lint-commits.outputs.release }
 
 permissions:
     contents: read
     pull-requests: read
 
 jobs:
-    Commit-Lint:
+    lint-commits:
         runs-on: ubuntu-latest
         outputs:
-            release: ${{ steps.analyze-commits.outputs.release }}
+            release: ${ steps.analyze-commits.outputs.release }
         steps:
             - name: Analyze Commits
               uses: ncino/semantic-commit-analyzer@v3
