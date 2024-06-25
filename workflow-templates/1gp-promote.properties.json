@@ -1,0 +1,6 @@
+{
+  "name": "nCino Salesforce 1GP Promote Workflow",
+  "description": "Promote workflow for a 1GP SF package",
+  "iconName": "plus-circle",
+  "categories": ["promote, pipeline, salesforce"]
+}
