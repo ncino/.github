@@ -1,0 +1,55 @@
+#! ⚠️ WARNING: This process is irreversible.
+#* This workflow:
+#*   - Promotes a package-version by triggering AWS CodePipeline.
+
+name: 🚀 Promote 1GP Package 🌩️
+on:
+  workflow_dispatch:
+    inputs:
+      github-release-tag:
+        description: |
+          The GitHub release tag (`v#.#.#` or `#.#.#`) associated with promoted package version.
+        required: true
+
+permissions:
+  id-token: write # This is required for requesting the ID token for AWS actions
+  contents: read # This is required for actions/checkout
+
+env:
+  GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+  REPO_NAME: "${{ github.event.repository.name }}"
+  DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
+  GIT_BASE_BRANCH: ${{ github.base_ref }}
+  GIT_BRANCH: ${{ github.ref_name }}
+
+jobs:
+  promote-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
+
+      - name: 🗃️ Checkout Repo 🗃️
+        uses: actions/checkout@v4
+        with:
+          token: "${{ steps.app-token.outputs.token }}"
+          ref: ${{ inputs.github-release-tag }}
+
+      - name: 🛠️ Force Repository Setup 🛠️
+        uses: ncino/action-force-setup@v3
+        with:
+          dev-hub-auth-url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}"
+          ci-ncino-ssh-private-signing-key: "${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}"
+          ci-ncino-ssh-public-signing-key: "${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}"
+
+      - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
+        uses: ncino/action-aws/s3_trigger_pipeline@v3
+        with:
+          run-package-automation-skipper: "false"
+
+      - name: 👏 Success Message 👏
+        if: success()
+        run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt

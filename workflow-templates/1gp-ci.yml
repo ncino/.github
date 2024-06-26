@@ -3,52 +3,80 @@ on:
   push:
     branches:
       - release
+      - "*.*.x"
 
   pull_request:
     branches:
       - release
+      - "*.*.x"
 
   workflow_dispatch:
     inputs:
-      CLEAN_ORG:
-        description: 'CLEAN_ORG - Input "true" to spin up a fresh org instead of pulling from orgfarm'
+      clean-org:
+        description: |
+          ( true | false ) Whether to use a clean org or an org from OrgFarm.
+          Defaults to using an OrgFarm org.
         required: false
         type: boolean
         default: false
-      PRESERVE_ORG:
-        description: 'PRESERVE_ORG - Input "true" to preserve the org after the workflow completes. Auth Information is stored in the build artifacts.'
+
+      preserve-org:
+        description: |
+          ( true | false ) Whether to preserve the org after the workflow completes.
+          Auth information is stored in the build artifacts.
         required: false
         type: boolean
         default: false
 
   workflow_call:
     inputs:
-      config-path:
+      skip-validation:
+        description: |
+          ( true | false ) Whether to skip validation when creating the package version.
+          Default is to skip validation.
+        required: false
+        default: true
+        type: boolean
+
+      ref:
+        description: |
+          The branch to use for the workflow.
+          Defaults to the branch the workflow was triggered from.
         required: false
         type: string
 
-concurrency:
-  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
-  cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
+    outputs:
+      package-receipt:
+        description: ( markdown ) The GitHub Step Summary from CI-build-and-test.
+        value: ${{ jobs.CI-build-and-test.outputs.package-receipt }}
+
+      package-version-id:
+        description: The Package version id for the package version created.
+        value: ${{ jobs.CI-build-and-test.outputs.package-version-id}}
+
+      auto-promote:
+        description: Whether to auto promote the package
+        value: "false"
 
 permissions:
   id-token: write # This is required for requesting the ID token for AWS actions
   contents: read # This is required for actions/checkout
 
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
+  cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
+
 env:
-  BUILD_URL: "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-  COMMIT_SHA1: "${{ github.sha }}"
   DD_AGENT_MAJOR_VERSION: "7"
-  DD_API_KEY: "${{ REPLACE_DD_API_SECRET }}"
-  DD_APP_KEY: "${{ REPLACE_DD_APP_SECRET }}"
-  DD_SITE: "datadoghq.com"
+  DD_API_KEY: "${{ secrets.DD_API_KEY }}"
+  DD_APP_KEY: "${{ secrets.DD_APP_KEY }}"
+  DD_SITE: datadoghq.com
   DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
-  DX_DELETE_SCRATCH_ORG: true
-  ENABLE_LINTING: "false"
-  GIT_BASE_BRANCH: "${{ github.base_ref }}"
-  GIT_BRANCH: "${{ github.ref_name }}"
-  GITHUB_TOKEN: "${{ REPLACE_TOKEN_SECRET }}"
-  REPO_NAME: "${{ github.event.repository.name }}"
+  GIT_BASE_BRANCH: ${{ github.base_ref }}
+  GIT_BRANCH: ${{ github.ref_name }}
+  GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+  RELEASE_FULLNAME: nCino Companies House (UK)
+  REPO_NAME: ${{ github.event.repository.name }}
 
 jobs:
   CI-build-and-test:
@@ -56,12 +84,23 @@ jobs:
     defaults:
       run:
         shell: bash
+    outputs:
+      package-receipt: ${{ steps.create-package.outputs.receipt }}
+      package-version-id: ${{ steps.create-package.outputs.version-id }}
     steps:
-      # 🎬 Install Phase 🎬
+      #######################################################
+      ######   🚧 SETUP AND INSTALL DEPENDENCIES 📀    ######
+      #######################################################
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
+
       - name: 🗃️ Checkout Repo 🗃️
         uses: actions/checkout@v4
         with:
-          token: "${{ REPLACE_TOKEN_SECRET }}"
+          token: "${{ steps.app-token.outputs.token }}"
           ref: ${{ inputs.ref }}
 
       - name: 🛠️ Force Repository Setup 🛠️
@@ -73,7 +112,9 @@ jobs:
           git-committer-name: ci-ncino
           git-committer-email: pdedevops@ncino.com
 
-      # 🥩🥔 Build Phase 🥩🥔
+      #######################################################
+      ######          🏗️ BUILD AND PACKAGE 📦          ######
+      #######################################################
       - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
         uses: ncino/action-validate-xml@v1
 
@@ -86,40 +127,51 @@ jobs:
       # - name: 🧑‍🎤 Run npm test:unit script 👩‍🎤
       #   run: npm run test:unit
 
-      - name: 👷‍♀️ Validate destructive changes 👷‍♀️
-        run: $DEVOPS_SCRIPTS_PATH/validate_destructive_changes.sh $COMMIT_SHA1
-
-      - name: 👩‍🌾 Get and Setup Org 👨‍🌾
+      - name: 👩‍🌾 Get orgfarm org 👨‍🌾
         id: setup-org
         uses: ncino/action-org-setup/org-provision-action@v3
-        with:
-          capability: { { REPLACE_CAPABILITY_NAME } }
-          github-token: "${{ REPLACE_TOKEN_SECRET }}"
-          orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
-          orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
+        env:
+          capability: "{{REPLACE_REPO_NAME}}"
+          clean-org: ${{ inputs.clean-org }}
+          has-namespace: true
+          github_token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
+          orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
+          package-updater: install-dependencies-action
+          preserve-org: ${{ inputs.preserve-org }}
 
       - name: 🚢 Deploy source and encrypt 💼
         uses: ncino/action-org-setup/org-source-push-action@v2
 
-      - name: 🤞 Force Apex Tests 🤞
+      - name: 🧪 Force Apex Tests 🧪
         uses: ncino/action-force-apex-tests@v3
         with:
-          auth-url: ${{ steps.setup-org.outputs.auth_url }}
+          auth-url: ${{ steps.setup-org.outputs.auth-url }}
 
-      # 🧹 Post-Build Cleanup Phase 🧹
-      - name: 🧹 Post Build Cleanup 🧹
-        if: ${{ steps.setup-org.outcome != 'skipped' && always() }}
-        uses: ncino/action-org-setup/org-cleanup-action@v1
-        with:
-          orgfarm-api-key: "${{REPLACE_ORGFARM_KEY_SECRET}}"
-          orgfarm-api-url: "${{REPLACE_ORGFARM_URL_SECRET}}"
-          preserve-org: "${{ inputs.PRESERVE_ORG }}"
-
+      #######################################################
+      ######         🧼 POST-BUILD CLEANUP 🧹          ######
+      #######################################################
       # 🏁 Artifact Upload Phase 🏁
       - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
-        if: ${{ github.ref_name == 'release' }}
+        if: ${{ github.ref_name == 'release' }} && success()
         uses: ncino/action-aws/s3_trigger_pipeline@v2
 
+      - name: 🧹 Post Build Cleanup 🧹
+        if: always()
+        continue-on-error: true
+        uses: ncino/action-org-setup/org-cleanup-action@v3
+        with:
+          orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
+          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
+          preserve-org: ${{ inputs.preserve-org }}
+
+      - name: 📝 Export Summary 📝
+        id: summary
+        run: |
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$(cat $GITHUB_STEP_SUMMARY)" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: 👏 Success Message 👏
-        if: ${{ success() }}
+        if: success()
         run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt
