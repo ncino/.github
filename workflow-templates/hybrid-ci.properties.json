@@ -1,0 +1,6 @@
+{
+  "name": "nCino Salesforce Hybrid-CI Workflow",
+  "description": "Develop in 2GP and package in 1GP",
+  "iconName": "align-justify",
+  "categories": ["pipeline, salesforce, delivery"]
+}
