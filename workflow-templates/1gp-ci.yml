@@ -84,9 +84,6 @@ jobs:
     defaults:
       run:
         shell: bash
-    outputs:
-      package-receipt: ${{ steps.create-package.outputs.receipt }}
-      package-version-id: ${{ steps.create-package.outputs.version-id }}
     steps:
       #######################################################
       ######   🚧 SETUP AND INSTALL DEPENDENCIES 📀    ######
@@ -130,11 +127,11 @@ jobs:
       - name: 👩‍🌾 Get orgfarm org 👨‍🌾
         id: setup-org
         uses: ncino/action-org-setup/org-provision-action@v3
-        env:
+        with:
           capability: "{{REPLACE_REPO_NAME}}"
           clean-org: ${{ inputs.clean-org }}
           has-namespace: true
-          github_token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+          github-token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
           orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
           package-updater: install-dependencies-action
