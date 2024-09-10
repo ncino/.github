@@ -1,1 +1,3 @@
 * @ncino/pde-delivery-platform
+
+/.github/workflows/security-checks.yml @ncino/product-security
