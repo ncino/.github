@@ -1,0 +1,77 @@
+version: 2
+registries:
+  npm-registry-npm-pkg-github-com-ncino:
+    type: npm-registry
+    url: https://npm.pkg.github.com/ncino
+    token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+  github-ci:
+    type: git
+    url: https://github.com
+    username: ci-ncino
+    password: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+updates:
+  - package-ecosystem: 'npm'
+    directory: '/'
+    target-branch: release
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: 'America/New_York'
+    versioning-strategy: increase
+    groups:
+      minor-patch:
+        applies-to: version-updates
+        patterns:
+          - '*'
+        update-types:
+          - 'minor'
+          - 'patch'
+    rebase-strategy: disabled
+    open-pull-requests-limit: 1 # SET TO 0 TO ONLY SHOW SECURITY UPDATES
+    commit-message: 
+      include: scope
+      prefix: 'fix(deps): NPM'
+    labels: 
+      - 'dependencies'
+      - 'dependabot'
+    registries:
+      - npm-registry-npm-pkg-github-com-ncino
+      - github-ci
+    allow:
+      - dependency-name: '*'
+        dependency-type: 'direct'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-patch']
+      - dependency-name: 'prettier'
+      - dependency-name: 'prettier-*'
+      - dependency-name: 'eslint'
+
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    target-branch: release
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: 'America/New_York'
+    rebase-strategy: disabled
+    open-pull-requests-limit: 1 # SET TO 0 TO ONLY SHOW SECURITY UPDATES
+    commit-message: # USED TO TRIGGER APPROPRIATE SEMANTIC FIX COMMIT
+      include: scope
+      prefix: 'fix(deps): GHA'
+    labels: 
+      - 'dependencies'
+      - 'dependabot'
+    registries:
+      - npm-registry-npm-pkg-github-com-ncino
+      - github-ci
+    allow:
+      - dependency-name: '*'
+        dependency-type: 'direct'
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-patch']
