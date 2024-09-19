@@ -62,7 +62,7 @@ updates:
     open-pull-requests-limit: 1 # SET TO 0 TO ONLY SHOW SECURITY UPDATES
     commit-message: # USED TO TRIGGER APPROPRIATE SEMANTIC FIX COMMIT
       include: scope
-      prefix: 'fix(deps): GHA'
+      prefix: 'chore(build): GHA'
     labels: 
       - 'dependencies'
       - 'dependabot'
