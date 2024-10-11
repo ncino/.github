@@ -45,10 +45,16 @@ jobs:
           ci-ncino-ssh-private-signing-key: "${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}"
           ci-ncino-ssh-public-signing-key: "${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}"
 
+      - name: Get Commit Sha from Tag
+        id: get-commit-sha
+        run: echo "::set-output name=commit-sha::$(git rev-list -n 1 ${{ inputs.github-release-tag }})"
+
       - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
         uses: ncino/action-aws/s3_trigger_pipeline@v3
         with:
           run-package-automation-skipper: "false"
+          commit-sha1: ${{ steps.get-commit-sha.outputs.commit-sha }}
+          version: ${{ inputs.github-release-tag }}
 
       - name: 👏 Success Message 👏
         if: success()
