@@ -140,7 +140,7 @@ jobs:
           wait: 120
 
       - name: 🧪 Force Apex Tests 🧪
-        uses: ncino/action-force-apex-tests@v3
+        uses: ncino/action-force-apex-tests@v4
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
 
