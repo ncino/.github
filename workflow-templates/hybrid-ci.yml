@@ -79,9 +79,10 @@ env:
 jobs:
   Path-Filtering:
     outputs:
-      APEX_INCLUDED: ${{ steps.path-filtering.outputs.src }}
-      MARKDOWN: ${{ steps.path-filtering.outputs.markdown }}
-      CHANGES_OTHER_THAN_MARKDOWN: ${{ steps.path-filtering.outputs.non-markdown }}
+      apex_changed:: ${{ steps.path-filtering.outputs.apex_changed }}
+      lwc_changed: ${{ steps.path-filtering.outputs.apex_changed }}
+      markdown_changed:: ${{ steps.path-filtering.outputs.markdown_changed }}
+      non_markdown_changed:: ${{ steps.path-filtering.outputs.non-markdown_changed }}
     runs-on: ubuntu-latest
     steps:
       # Uses the action by @dorny to filter paths
@@ -93,20 +94,20 @@ jobs:
           filters: |
             apex_changed:
               - "src/${{ env.NAMESPACE }}/**/*.cls"
-              - "src/${{ inputs.namespace }}/**/*.trigger"
-              - "src/${{ inputs.namespace }}/**/*.component"
-              - "src/${{ inputs.namespace }}/**/*.page"
-              - "src/${{ inputs.namespace }}/**/*.*-meta.xml"
+              - "src/${{ env.NAMESPACE }}/**/*.trigger"
+              - "src/${{ env.NAMESPACE }}/**/*.component"
+              - "src/${{ env.NAMESPACE }}/**/*.page"
+              - "src/${{ env.NAMESPACE }}/**/*.*-meta.xml"
             lwc_changed: 
-              - "src/${{ inputs.namespace }}/**/*.js"
-              - "src/${{ inputs.namespace }}/**/*.html"
-              - "src/${{ inputs.namespace }}/**/*.css"
+              - "src/${{ env.NAMESPACE }}/**/*.js"
+              - "src/${{ env.NAMESPACE }}/**/*.html"
+              - "src/${{ env.NAMESPACE }}/**/*.css"
             markdown_changed:
               - '**/*.md'
             non_markdown_changed:
               - '!**/*.md'
-          list-files: ${{ inputs.list-files }}
-          token: ${{ inputs.token }}
+          list-files: 'json'
+          token: ${{ env.GITHUB_TOKEN }}
 
   CI-build-and-test:
     needs: Path-Filtering
@@ -131,6 +132,7 @@ jobs:
           ref: ${{ inputs.ref }}
 
       - name: 🛠️ Force Repository Setup 🛠️
+        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
         uses: ncino/action-force-setup@v2
         with:
           dev-hub-auth-url: '${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}'
@@ -144,15 +146,18 @@ jobs:
       ######          🏗️ BUILD AND PACKAGE 📦          ######
       #######################################################
       - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
+        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
         uses: ncino/action-validate-xml@v1
 
       - name: 📦 Create a 2gp Package Version 📦
+        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
         id: create-package
         uses: ncino/action-create-package@v1
         with:
           skip-validation: ${{ inputs.skip-validation }}
 
       - name: 👩‍🌾 Get and Setup Org 👨‍🌾
+        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
         id: setup-org
         uses: ncino/action-org-setup/org-provision-action@v3
         with:
@@ -165,6 +170,7 @@ jobs:
           preserve-org: ${{ inputs.preserve-org }}
 
       - name: 🔭 Install package version to scratch org 👩‍🚀
+        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
         uses: ncino/action-org-setup/org-install-package-action@v3
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
@@ -173,6 +179,7 @@ jobs:
           wait: 120
 
       - name: 🧪 Force Apex Tests 🧪
+        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
         uses: ncino/action-force-apex-tests@v4
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
@@ -181,7 +188,7 @@ jobs:
       ######         🧼 POST-BUILD CLEANUP 🧹          ######
       #######################################################
       - name: 🧹 Post Build Cleanup 🧹
-        if: always()
+        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }} &&
         uses: ncino/action-org-setup/org-cleanup-action@v3
         with:
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
