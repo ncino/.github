@@ -82,10 +82,10 @@ env:
 jobs:
   Path-Filtering:
     outputs:
-      apex_changed:: ${{ steps.path-filtering.outputs.apex_changed }}
-      lwc_changed: ${{ steps.path-filtering.outputs.apex_changed }}
-      markdown_changed:: ${{ steps.path-filtering.outputs.markdown_changed }}
-      non_markdown_changed:: ${{ steps.path-filtering.outputs.non-markdown_changed }}
+      apex-changed:: ${{ steps.path-filtering.outputs.apex-changed }}
+      lwc-changed: ${{ steps.path-filtering.outputs.lwc-changed }}
+      markdown-changed:: ${{ steps.path-filtering.outputs.markdown-changed }}
+      non-markdown-changed:: ${{ steps.path-filtering.outputs.non-markdown-changed }}
     runs-on: ubuntu-latest
     steps:
       # Uses the action by @dorny to filter paths
@@ -95,19 +95,19 @@ jobs:
         id: path-filtering
         with:
           filters: |
-            apex_changed:
+            apex-changed:
               - "src/${{ env.NAMESPACE }}/**/*.cls"
               - "src/${{ env.NAMESPACE }}/**/*.trigger"
               - "src/${{ env.NAMESPACE }}/**/*.component"
               - "src/${{ env.NAMESPACE }}/**/*.page"
               - "src/${{ env.NAMESPACE }}/**/*.*-meta.xml"
-            lwc_changed: 
+            lwc-changed: 
               - "src/${{ env.NAMESPACE }}/**/*.js"
               - "src/${{ env.NAMESPACE }}/**/*.html"
               - "src/${{ env.NAMESPACE }}/**/*.css"
-            markdown_changed:
+            markdown-changed:
               - '**/*.md'
-            non_markdown_changed:
+            non-markdown-changed:
               - '!**/*.md'
           list-files: 'json'
           token: ${{ env.GITHUB_TOKEN }}
@@ -147,7 +147,7 @@ jobs:
       ######          🏗️ BUILD AND PACKAGE 📦          ######
       #######################################################
       - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
-        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }}
         uses: ncino/action-validate-xml@v1
 
       # Uncomment if you have Angular or AngularJS jest tests
@@ -161,7 +161,7 @@ jobs:
 
       - name: 👩‍🌾 Get orgfarm org 👨‍🌾
         id: setup-org
-        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }}
         uses: ncino/action-org-setup/org-provision-action@v3
         with:
           capability: '{{REPLACE_REPO_NAME}}'
@@ -174,11 +174,11 @@ jobs:
           preserve-org: ${{ inputs.preserve-org }}
 
       - name: 🚢 Deploy source and encrypt 💼
-        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }}
         uses: ncino/action-org-setup/org-source-push-action@v2
 
       - name: 🧪 Force Apex Tests 🧪
-        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }}
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }}
         uses: ncino/action-force-apex-tests@v4
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
@@ -188,11 +188,11 @@ jobs:
       #######################################################
       # 🏁 Artifact Upload Phase 🏁
       - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
-        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }} &&  ${{ github.ref_name == 'release' }} && success()
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }} &&  ${{ github.ref_name == 'release' }} && success()
         uses: ncino/action-aws/s3_trigger_pipeline@v2
 
       - name: 🧹 Post Build Cleanup 🧹
-        if: ${{ needs.Path-Filtering.outputs.non_markdown_changed == 'true' }} && always()
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }} && always()
         continue-on-error: true
         uses: ncino/action-org-setup/org-cleanup-action@v3
         with:
