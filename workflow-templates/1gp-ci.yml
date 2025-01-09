@@ -91,7 +91,7 @@ jobs:
       # Uses the action by @dorny to filter paths
       # More info can be found at https://github.com/dorny/paths-filter
       - name: Run Path Filtering
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # current version 3.0.2
         id: path-filtering
         with:
           filters: |
