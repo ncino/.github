@@ -82,10 +82,10 @@ env:
 jobs:
   Path-Filtering:
     outputs:
-      apex-changed:: ${{ steps.path-filtering.outputs.apex-changed }}
+      apex-changed: ${{ steps.path-filtering.outputs.apex-changed }}
       lwc-changed: ${{ steps.path-filtering.outputs.lwc-changed }}
-      markdown-changed:: ${{ steps.path-filtering.outputs.markdown-changed }}
-      non-markdown-changed:: ${{ steps.path-filtering.outputs.non-markdown-changed }}
+      markdown-changed: ${{ steps.path-filtering.outputs.markdown-changed }}
+      non-markdown-changed: ${{ steps.path-filtering.outputs.non-markdown-changed }}
     runs-on: ubuntu-latest
     steps:
       # Uses the action by @dorny to filter paths

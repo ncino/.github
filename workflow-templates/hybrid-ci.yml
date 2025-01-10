@@ -79,27 +79,26 @@ env:
 jobs:
   Path-Filtering:
     outputs:
-      apex-changed:: ${{ steps.path-filtering.outputs.apex-changed }}
+      apex-changed: ${{ steps.path-filtering.outputs.apex-changed }}
       lwc-changed: ${{ steps.path-filtering.outputs.lwc-changed }}
-      markdown-changed:: ${{ steps.path-filtering.outputs.markdown-changed }}
-      non-markdown-changed:: ${{ steps.path-filtering.outputs.non-markdown-changed }}
+      markdown-changed: ${{ steps.path-filtering.outputs.markdown-changed }}
+      non-markdown-changed: ${{ steps.path-filtering.outputs.non-markdown-changed }}
     runs-on: ubuntu-latest
     steps:
       # Uses the action by @dorny to filter paths
       # More info can be found at https://github.com/dorny/paths-filter
-      # current version: 3.0.2
       - name: Run Path Filtering
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # current version: 3.0.2
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # current version 3.0.2
         id: path-filtering
         with:
           filters: |
-            apex_changed:
+            apex-changed:
               - "src/${{ env.NAMESPACE }}/**/*.cls"
               - "src/${{ env.NAMESPACE }}/**/*.trigger"
               - "src/${{ env.NAMESPACE }}/**/*.component"
               - "src/${{ env.NAMESPACE }}/**/*.page"
               - "src/${{ env.NAMESPACE }}/**/*.*-meta.xml"
-            lwc_changed: 
+            lwc-changed: 
               - "src/${{ env.NAMESPACE }}/**/*.js"
               - "src/${{ env.NAMESPACE }}/**/*.html"
               - "src/${{ env.NAMESPACE }}/**/*.css"
