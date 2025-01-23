@@ -77,7 +77,6 @@ env:
   GITHUB_TOKEN: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
   RELEASE_FULLNAME: nCino Companies House (UK)
   REPO_NAME: ${{ github.event.repository.name }}
-  NAMESPACE: << REPLACE WITH PROJECT NAMESPACE >>
 
 jobs:
   Path-Filtering:
