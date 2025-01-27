@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - release
-      - "*.*.x"
+      - '*.*.x'
 
   workflow_dispatch:
     inputs:
@@ -52,31 +52,68 @@ on:
 
       auto-promote:
         description: Whether to auto promote the package
-        value: "false"
+        value: 'false'
 
 permissions:
   id-token: write # This is required for requesting the ID token for AWS actions
   contents: read # This is required for actions/checkout
 
 concurrency:
-  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
 
 env:
   COMMIT_SHA1: ${{ github.sha }}
-  DD_AGENT_MAJOR_VERSION: "7"
-  DD_API_KEY: "${{ secrets.DD_API_KEY }}"
-  DD_APP_KEY: "${{ secrets.DD_APP_KEY }}"
+  DD_AGENT_MAJOR_VERSION: '7'
+  DD_API_KEY: '${{ secrets.DD_API_KEY }}'
+  DD_APP_KEY: '${{ secrets.DD_APP_KEY }}'
   DD_SITE: datadoghq.com
-  DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
+  DEVOPS_SCRIPTS_PATH: './devops-utility-belt/scripts'
   GIT_BASE_BRANCH: ${{ github.base_ref }}
   GIT_BRANCH: ${{ github.ref_name }}
-  GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+  GITHUB_TOKEN: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
   RELEASE_FULLNAME: $PACKAGE_NAME
   REPO_NAME: ${{ github.event.repository.name }}
 
 jobs:
+  Path-Filtering:
+    outputs:
+      apex-changed: ${{ steps.path-filtering.outputs.apex-changed }}
+      markdown-changed: ${{ steps.path-filtering.outputs.markdown-changed }}
+      non-markdown-changed: ${{ steps.path-filtering.outputs.non-markdown-changed }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🫥 Checkout repo 😐
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+          sparse-checkout: 'sfdx-project.json'
+
+      - name: Get Namespace
+        run: echo "NAMESPACE=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_ENV
+
+      # Uses the action by @dorny to filter paths
+      # More info can be found at https://github.com/dorny/paths-filter
+      - name: Run Path Filtering
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # current version 3.0.2
+        id: path-filtering
+        with:
+          filters: |
+            apex-changed:
+              - "src/${{ env.NAMESPACE }}/**/*.cls"
+              - "src/${{ env.NAMESPACE }}/**/*.trigger"
+              - "src/${{ env.NAMESPACE }}/**/*.component"
+              - "src/${{ env.NAMESPACE }}/**/*.page"
+              - "src/${{ env.NAMESPACE }}/**/*.*-meta.xml"
+            markdown-changed:
+              - '**/*.md'
+            non-markdown-changed:
+              - '!**/*.md'
+          list-files: 'json'
+          token: ${{ env.GITHUB_TOKEN }}
+
   CI-build-and-test:
+    needs: Path-Filtering
     runs-on: ubuntu-latest
     outputs:
       package-receipt: ${{ steps.create-package.outputs.receipt }}
@@ -94,15 +131,16 @@ jobs:
       - name: 🗃️ Checkout Repo 🗃️
         uses: actions/checkout@v4
         with:
-          token: "${{ steps.app-token.outputs.token }}"
+          token: '${{ steps.app-token.outputs.token }}'
           ref: ${{ inputs.ref }}
 
       - name: 🛠️ Force Repository Setup 🛠️
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }}
         uses: ncino/action-force-setup@v2
         with:
-          dev-hub-auth-url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}"
-          ci-ncino-ssh-private-signing-key: "${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}"
-          ci-ncino-ssh-public-signing-key: "${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}"
+          dev-hub-auth-url: '${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}'
+          ci-ncino-ssh-private-signing-key: '${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}'
+          ci-ncino-ssh-public-signing-key: '${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}'
           git-committer-name: ci-ncino
           git-committer-email: pdedevops@ncino.com
           setup-salesforce-version: latest
@@ -111,27 +149,31 @@ jobs:
       ######          🏗️ BUILD AND PACKAGE 📦          ######
       #######################################################
       - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
+        if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }}
         uses: ncino/action-validate-xml@v1
 
       - name: 📦 Create a 2gp Package Version 📦
+        if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
         id: create-package
         uses: ncino/action-create-package@v1
         with:
           skip-validation: ${{ inputs.skip-validation }}
 
       - name: 👩‍🌾 Get and Setup Org 👨‍🌾
+        if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
         id: setup-org
         uses: ncino/action-org-setup/org-provision-action@v3
         with:
           clean-org: ${{ inputs.clean-org }}
-          github-token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+          github-token: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
           has-namespace: false
-          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
+          orgfarm-api-key: '${{ secrets.ORG_FARM_API_KEY }}'
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
           package-updater: install-dependencies-action
           preserve-org: ${{ inputs.preserve-org }}
 
       - name: 🔭 Install package version to scratch org 👩‍🚀
+        if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
         uses: ncino/action-org-setup/org-install-package-action@v3
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
@@ -140,6 +182,7 @@ jobs:
           wait: 120
 
       - name: 🧪 Force Apex Tests 🧪
+        if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
         uses: ncino/action-force-apex-tests@v4
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
@@ -152,7 +195,7 @@ jobs:
         uses: ncino/action-org-setup/org-cleanup-action@v3
         with:
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
-          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
+          orgfarm-api-key: '${{ secrets.ORG_FARM_API_KEY }}'
           preserve-org: ${{ inputs.preserve-org }}
 
       - name: 📝 Export Summary 📝
