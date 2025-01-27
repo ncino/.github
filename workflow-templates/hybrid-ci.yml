@@ -191,7 +191,7 @@ jobs:
       ######         🧼 POST-BUILD CLEANUP 🧹          ######
       #######################################################
       - name: 🧹 Post Build Cleanup 🧹
-        if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }} && always()
+        if: always()
         uses: ncino/action-org-setup/org-cleanup-action@v3
         with:
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}

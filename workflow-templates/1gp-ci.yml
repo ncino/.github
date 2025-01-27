@@ -195,7 +195,7 @@ jobs:
         uses: ncino/action-aws/s3_trigger_pipeline@v2
 
       - name: 🧹 Post Build Cleanup 🧹
-        if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }} && always()
+        if: always()
         continue-on-error: true
         uses: ncino/action-org-setup/org-cleanup-action@v3
         with:
