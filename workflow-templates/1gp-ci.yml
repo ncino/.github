@@ -143,8 +143,6 @@ jobs:
           dev-hub-auth-url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}"
           ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
           ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
-          git-committer-name: ci-ncino
-          git-committer-email: pdedevops@ncino.com
 
       #######################################################
       ######          🏗️ BUILD AND PACKAGE 📦          ######
@@ -165,20 +163,19 @@ jobs:
       - name: 👩‍🌾 Get orgfarm org 👨‍🌾
         id: setup-org
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
-        uses: ncino/action-org-setup/org-provision-action@v3
+        uses: ncino/action-org-setup/org-provision-action@v5
         with:
-          capability: "${{ github.event.repository.name }}"
           clean-org: ${{ inputs.clean-org }}
           has-namespace: true
           github-token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
           orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
-          package-updater: install-dependencies-action
           preserve-org: ${{ inputs.preserve-org }}
+          sftd-api-key: ${{ secrets.SFTD_API_KEY }}
 
       - name: 🚢 Deploy source and encrypt 💼
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
-        uses: ncino/action-org-setup/org-source-push-action@v2
+        uses: ncino/action-org-setup/org-source-push-action@v5
 
       - name: 🧪 Force Apex Tests 🧪
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
@@ -192,12 +189,12 @@ jobs:
       # 🏁 Artifact Upload Phase 🏁
       - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
         if: ${{ github.ref_name == 'release' }} && success()
-        uses: ncino/action-aws/s3_trigger_pipeline@v2
+        uses: ncino/action-aws/s3_trigger_pipeline@v3
 
       - name: 🧹 Post Build Cleanup 🧹
         if: always()
         continue-on-error: true
-        uses: ncino/action-org-setup/org-cleanup-action@v3
+        uses: ncino/action-org-setup/org-cleanup-action@v5
         with:
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
           orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
