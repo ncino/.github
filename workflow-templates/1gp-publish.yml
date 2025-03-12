@@ -187,7 +187,7 @@ jobs:
    - name: 🪄 Convert source to metadata format 🤹‍♂️
      id: convert-source
      run: |
-      jq -r '.packageDirectories[] | select(.default=true)' sfdx-project.json >defaultPackage.json
+      jq -r '.packageDirectories[] | select(.default == true)' sfdx-project.json >defaultPackage.json
       srcPath=$(jq -r '.path' defaultPackage.json)
       packageName=$(jq -r '.package' defaultPackage.json)
       mkdir dx && mv $srcPath dx/ && rm -rf src/unpackaged defaultPackage.json
