@@ -1,0 +1,60 @@
+name: 📚 1GP Publish 📝
+on:
+  push:
+    branches:
+      - release
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+env:
+  COMMIT_SHA1: ${{ github.sha }}
+  GIT_BRANCH: ${{ github.ref_name }}
+  REPO_NAME: ${{ github.event.repository.name }}
+  NAMESPACE: 'nCino'
+  DELIVERY_SCRIPTS_PATH: './devops-utility-belt/scripts'
+  GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+
+jobs:
+    publish-release:
+        name: 🎉 Publish Github Release
+        runs-on: ubuntu-latest
+        steps:
+            - name: 🗃️ Checkout Code
+              uses: actions/checkout@v4
+              with:
+                fetch-depth: 0
+                token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+            - name: 🛠️ Force Repository Setup
+              uses: ncino/action-force-setup@v3
+              with:
+                ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
+                ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
+                dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
+              env:
+                GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+            - name: 🦃 Install Node 20 for Semantic Release
+              uses: actions/setup-node@v4
+              with:
+                node-version: 20
+
+            - name: 🚛 Semantic Release
+              id: semantic-release
+              run: |
+                set -e
+                npx semantic-release --debug >semantic-release.log
+                echo "url=$(cat semantic-release.log | grep -o 'https.*/tag/.*' | tr -d '\n')" >> $GITHUB_OUTPUT
+                echo "tag=$(cat semantic-release.log | grep -o '/tag/.*' | tr -d '/tag/')" >> $GITHUB_OUTPUT
+              env:
+                GIT_AUTHOR_EMAIL: pdedevops@ncino.com
+                GIT_AUTHOR_NAME: ci-ncino
+                GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+                NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+            - name: 📝 Release Summary
+              run: |
+                echo "## ✏️ ✅ Published Release 📦
+                    * [${{ steps.semantic-release.outputs.tag }}](${{ steps.semantic-release.outputs.url }})
+                " >> $GITHUB_STEP_SUMMARY

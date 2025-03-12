@@ -1,0 +1,11 @@
+### JS ###
+node_modules
+spec/lib/AngularJS
+spec/lib/llc_web_ui
+_SpecRunner.html
+.grunt
+
+### IDE ###
+## VS Code ##
+.vscode/*
+!.vscode/settings.json

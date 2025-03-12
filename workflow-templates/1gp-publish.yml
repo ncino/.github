@@ -2,9 +2,9 @@
 #* feature-branch or the release branch. Jobs run in following order:
 #*   1. commit-lint: checks commit messages for semantic release.
 #*   2. merge-ci: runs the ci build to test feature branch changes on merge.
-#*   3. draft-release: creates a draft release in GitHub and transitions tickets to packaging.
+#*   3. swordfish: gets the next version and transitions tickets to packaging.
 #*   4. publish-package: deploys the package to the packaging org and publishes PLM record.
-#*   5. update-release: Publishes the github release and transitions tickets to verification.
+#*   5. publish-release: Publishes the github release and transitions tickets to verification.
 
 name: 📚 1GP Publish 📝
 on:
@@ -18,6 +18,7 @@ env:
  GIT_BRANCH: ${{ github.ref_name }}
  REPO_NAME: ${{ github.event.repository.name }}
  RELEASE_FULLNAME: '<< PACKAGE FULLNAME HERE >>'
+ DX_MDAPI_DEPLOY: 'true'
  NAMESPACE: '<< NAMESPACE HERE >>'
  DELIVERY_SCRIPTS_PATH: './devops-utility-belt/scripts'
  GITHUB_TOKEN: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
@@ -25,31 +26,20 @@ env:
 jobs:
  commit-lint:
   name: 📝  Commit Lint
-  uses: ncino/<< REPO NAME HERE >>/.github/workflows/commit-lint.yml@release
+  uses: ncino/force-nCino/.github/workflows/commit-lint.yml@release
   secrets: inherit
   permissions:
    contents: read
    pull-requests: read
 
- merge-ci:
-  name: 🔄  Merge CI
+ swordfish:
   needs: [commit-lint]
-  uses: ncino/<< REPO NAME HERE >>/.github/workflows/1gp-ci.yml@release
-  secrets: inherit
-  permissions:
-   id-token: write
-   contents: read
-
- draft-release:
   if: ${{ needs.commit-lint.outputs.release != 'NONE' }}
-  name: ⚔︎🐠 Create Pre-release and Transition to Packaging
-  needs: [commit-lint, merge-ci]
+  name: ⚔︎🐠 Get Next Version and Transition to Packaging
   runs-on: ubuntu-latest
   outputs:
-   id: ${{ fromJson(steps.create-pre-release.outputs.release).id }}
    jira-ticket-ids: ${{ steps.parse-inputs.outputs.jira-ticket-ids }}
-   tag: ${{ steps.semantic-release.outputs.tag }}
-   url: ${{ steps.semantic-release.outputs.url }}
+   version: ${{ steps.semantic-release.outputs.version }}
 
   steps:
    - name: 🗃️ Checkout Code
@@ -72,36 +62,19 @@ jobs:
      with:
       node-version: 20
 
-   - name: 🚛 Semantic Release
+   - name: 🚛 Get Next Version
      id: semantic-release
      run: |
       set -e
-      npx semantic-release --debug >semantic-release.log
-      echo "url=$(cat semantic-release.log | grep -o 'https.*/tag/.*' | tr -d '\n')" >> $GITHUB_OUTPUT
-      echo "tag=$(cat semantic-release.log | grep -o '/tag/.*' | tr -d '/tag/')" >> $GITHUB_OUTPUT
+      npx semantic-release --debug --dry-run >semantic-release.log
+      export NEXT_VERSION=$(cat semantic-release.log | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | tr -d 'The next release version is ')
+      echo $NEXT_VERSION
+      echo "version=$(echo $NEXT_VERSION)" >> $GITHUB_OUTPUT
      env:
       GIT_AUTHOR_EMAIL: pdedevops@ncino.com
       GIT_AUTHOR_NAME: ci-ncino
       GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
       NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
-
-   - name: ✨ Create Pre-release ✨
-     id: create-pre-release
-     uses: ncino/action-update-release@v2
-     with:
-      github-token: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
-      tag-name: ${{ steps.semantic-release.outputs.tag }}
-      prerelease: true
-      draft: false
-      body: |
-       ## 🔨 Build Information
-       * Release generated in job [${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).}
-
-   - name: 📝 Release Summary
-     run: |
-      echo "## ✏️ Created Pre-release
-       * [${{ steps.semantic-release.outputs.tag }}](${{ steps.semantic-release.outputs.url }})
-      " >> $GITHUB_STEP_SUMMARY
 
    - name: 🔬 Run the Jira parsing action
      id: parse-inputs
@@ -118,15 +91,25 @@ jobs:
      uses: ncino/action-jira-transition@v1
      env:
       JIRA_TRANSITION_WEBHOOK: ${{ secrets.JIRA_TRANSITION_WEBHOOK }}
-      PACKAGE_VERSION: ${{ steps.semantic-release.outputs.tag }}
-      RELEASE_FULLNAME: << PACKAGE FULLNAME HERE >>
+      PACKAGE_VERSION: ${{ steps.semantic-release.outputs.version }}
+      RELEASE_FULLNAME: ${{ env.RELEASE_FULLNAME }}
      with:
       issue-ids: ${{ steps.parse-inputs.outputs.jira-ticket-ids }}
       new-status: 'Packaging'
 
+ # Can be the hybrid or 1gp ci workflow
+ merge-ci:
+  name: 🔄  Merge CI
+  needs: [commit-lint]
+  uses: ncino/<< REPO NAME HERE >>/.github/workflows/1gp-ci.yml@release
+  secrets: inherit
+  permissions:
+   id-token: write
+   contents: read
+
  publish-package:
   name: 🚀 Publish Package to Packaging Org 🚀
-  needs: [draft-release]
+  needs: [draft-release, merge-ci]
   runs-on: ubuntu-latest
   steps:
    - uses: actions/create-github-app-token@v1
@@ -155,10 +138,10 @@ jobs:
    - name: 🗣️ Echo important data 📣
      id: echo-data
      run: |
-      echo "🚨 COMMIT_SHA1 = ${{ steps.get-commit-sha.outputs.commit-sha }} 🚨"
+      echo "🚨 COMMIT_SHA1 = ${{ github.sha }} 🚨"
       echo "GIT_BRANCH: $GIT_BRANCH"
-      echo "PACKAGE_VERSION: ${{ needs.draft-release.outputs.tag}}"
-      packageMetadataId=$(jq -r '.plugins.subscriberMetadataPackageId' sfdx-project.json)
+      echo "PACKAGE_VERSION: ${{ needs.swordfish.outputs.version}}"
+      packageMetadataId=$(jq -r '.plugins.subscriberPackageId' sfdx-project.json)
       echo "PACKAGE_METADATA_ID: $packageMetadataId"
       echo "package-metadata-id=$packageMetadataId" >> $GITHUB_OUTPUT
       echo "REPO_NAME: $REPO_NAME"
@@ -177,6 +160,14 @@ jobs:
       PLATFORM_ENCRYPTION_FAILURE_NOTIFICATION_CHANNEL: devops-alerts
       SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
+   - name: 🍣 Setup Node Again 👌
+     uses: actions/setup-node@v4
+     with:
+      node-version: 20
+
+   - name: 📇 Configure .npmrc file 📜
+     run: $DELIVERY_SCRIPTS_PATH/npm_auth.sh
+
    - name: 🆙 Update deps in packaging org 🆙
      run: |
       npm i -g @ncino/cli
@@ -184,6 +175,14 @@ jobs:
       ncino package install -o $username -w -1
      env:
       SFTD_API_KEY: ${{ secrets.SFTD_API_KEY }}
+
+   - name: 🌊 Remove Unchanged Flows 🌊
+     run: $DELIVERY_SCRIPTS_PATH/remove_unchanged_flows.py
+     env:
+      PACKAGE_VERSION: ${{ needs.swordfish.outputs.version }}
+
+   - name: ✔︎ Validate XML
+     uses: ncino/action-validate-xml@v1
 
    - name: 🪄 Convert source to metadata format 🤹‍♂️
      id: convert-source
@@ -214,7 +213,7 @@ jobs:
       pip install pyyaml
       $DELIVERY_SCRIPTS_PATH/sf_package_uploader.py \
         --package-metadata-id ${{ steps.echo-data.outputs.package-metadata-id }} \
-        --package-version ${{ needs.draft-release.outputs.tag }} \
+        --package-version ${{ needs.swordfish.outputs.version }} \
         --prefix RELEASE \
         --plm-api-key ${{ secrets.PLM_API_KEY }} \
         --generate-password \
@@ -222,34 +221,73 @@ jobs:
      env:
       PLM_API_BASE_URL: ${{ secrets.PLM_API_ENDPOINT }}
 
- ###############################################
- ######## 🎊 UPDATE GITHUB RELEASE 🎉 #########
- ###############################################
- update-release:
-  name: 🎉 Update Github Release and Transition to Verification
-  runs-on: ubuntu-latest
-  needs: [publish-package, draft-release]
-  steps:
-   - name: 🎊 Update Github Release 🎉
-     uses: ncino/action-update-release@v2
-     with:
-      github-token: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
-      tag-name: ${{ needs.draft-release.outputs.tag }}
-      prerelease: false
-
-   - name: 📝 Release Summary
-     # TODO: Add the PLM Record Link to the release summary
+   - name: Build Notifications
+     if: always()
      run: |
-      echo "## ✏️ ✅ Published Release 📦
-        * [${{ needs.draft-release.outputs.tag }}](${{ needs.draft-release.outputs.url }})
-      " >> $GITHUB_STEP_SUMMARY
-
-   - name: 🪬 Transition Jira Tickets
-     uses: ncino/action-jira-transition@v1
+      if [[ "${{ job.status }}" == "failure" ]]; then
+        touch /tmp/build_failures.txt
+      fi
+      $DELIVERY_SCRIPTS_PATH/build_notifications.py
      env:
-      JIRA_TRANSITION_WEBHOOK: '${{ secrets.JIRA_TRANSITION_WEBHOOK }}'
-      PACKAGE_VERSION: ${{ needs.draft-release.outputs.tag }}
-      RELEASE_FULLNAME: << PACKAGE FULLNAME HERE >>
-     with:
-      issue-ids: ${{ needs.draft-release.outputs.jira-ticket-ids }}
-      new-status: 'Verification'
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      CI_SOURCE_DIRECTORY: ${{ github.workspace }}
+      SWORDFISH_BUILD: true
+      CI_BRANCH: ${{ env.GIT_BRANCH }}
+      CI_BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+  ###############################################
+  ######## 🎊 Publish GITHUB RELEASE 🎉 #########
+  ###############################################
+  publish-release:
+   name: 🎉 Publish Github Release and Transition to Verification
+   runs-on: ubuntu-latest
+   needs: [publish-package, swordfish]
+   steps:
+    - name: 🗃️ Checkout Code
+      uses: actions/checkout@v4
+      with:
+       fetch-depth: 0
+       token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+    - name: 🛠️ Force Repository Setup
+      uses: ncino/action-force-setup@v3
+      with:
+       ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
+       ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
+       dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
+      env:
+       GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+    - name: 🦃 Install Node 20 for Semantic Release
+      uses: actions/setup-node@v4
+      with:
+       node-version: 20
+
+    - name: 🚛 Semantic Release
+      id: semantic-release
+      run: |
+       set -e
+       npx semantic-release --debug >semantic-release.log
+       echo "url=$(cat semantic-release.log | grep -o 'https.*/tag/.*' | tr -d '\n')" >> $GITHUB_OUTPUT
+       echo "tag=$(cat semantic-release.log | grep -o '/tag/.*' | tr -d '/tag/')" >> $GITHUB_OUTPUT
+      env:
+       GIT_AUTHOR_EMAIL: pdedevops@ncino.com
+       GIT_AUTHOR_NAME: ci-ncino
+       GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+       NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+
+    - name: 📝 Release Summary
+      run: |
+       echo "## ✏️ ✅ Published Release 📦
+         * [${{ steps.semantic-release.outputs.tag }}](${{ steps.semantic-release.outputs.url }})
+       " >> $GITHUB_STEP_SUMMARY
+
+    - name: 🪬 Transition Jira Tickets
+      uses: ncino/action-jira-transition@v1
+      env:
+       JIRA_TRANSITION_WEBHOOK: '${{ secrets.JIRA_TRANSITION_WEBHOOK }}'
+       PACKAGE_VERSION: ${{ steps.semantic-release.outputs.tag }}
+       RELEASE_FULLNAME: ${{ env.RELEASE_FULLNAME }}
+      with:
+       issue-ids: ${{ needs.swordfish.outputs.jira-ticket-ids }}
+       new-status: 'Verification'
