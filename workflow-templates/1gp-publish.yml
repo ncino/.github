@@ -11,7 +11,6 @@ on:
  push:
   branches:
    - release
-   # - "*.*.x"
 
 env:
  COMMIT_SHA1: ${{ github.sha }}
