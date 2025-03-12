@@ -1,4 +1,4 @@
-name: 📚 1GP Publish 📝
+name: 📚 Template publish 📝
 on:
   push:
     branches:
