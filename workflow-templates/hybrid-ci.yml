@@ -71,7 +71,6 @@ env:
   DEVOPS_SCRIPTS_PATH: './devops-utility-belt/scripts'
   GIT_BASE_BRANCH: ${{ github.base_ref }}
   GIT_BRANCH: ${{ github.ref_name }}
-  GITHUB_TOKEN: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
   RELEASE_FULLNAME: $PACKAGE_NAME
   REPO_NAME: ${{ github.event.repository.name }}
 
@@ -83,10 +82,17 @@ jobs:
       non-markdown-changed: ${{ steps.path-filtering.outputs.non-markdown-changed }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          owner: ${{ github.repository_owner }}
+          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
+
       - name: 🫥 Checkout repo 😐
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           sparse-checkout: 'sfdx-project.json'
 
       - name: Get Namespace
@@ -122,28 +128,31 @@ jobs:
       #######################################################
       ######   🚧 SETUP AND INSTALL DEPENDENCIES 📀    ######
       #######################################################
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          owner: ${{ github.repository_owner }}
           private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
 
       - name: 🗃️ Checkout Repo 🗃️
         uses: actions/checkout@v4
         with:
-          token: '${{ steps.app-token.outputs.token }}'
+          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ inputs.ref }}
 
       - name: 🛠️ Force Repository Setup 🛠️
         if: ${{ needs.Path-Filtering.outputs.non-markdown-changed == 'true' }}
-        uses: ncino/action-force-setup@v2
+        uses: ncino/action-force-setup@v4
         with:
-          dev-hub-auth-url: '${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}'
-          ci-ncino-ssh-private-signing-key: '${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}'
-          ci-ncino-ssh-public-signing-key: '${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}'
-          git-committer-name: ci-ncino
-          git-committer-email: pdedevops@ncino.com
+          ci-github-app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          ci-github-app-private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
+          ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
+          ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
+          dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
           setup-salesforce-version: latest
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       #######################################################
       ######          🏗️ BUILD AND PACKAGE 📦          ######
@@ -162,30 +171,34 @@ jobs:
       - name: 👩‍🌾 Get and Setup Org 👨‍🌾
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
         id: setup-org
-        uses: ncino/action-org-setup/org-provision-action@v3
+        uses: ncino/action-org-setup/org-provision-action@v5
         with:
           clean-org: ${{ inputs.clean-org }}
-          github-token: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
+          github-token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
           has-namespace: false
-          orgfarm-api-key: '${{ secrets.ORG_FARM_API_KEY }}'
+          orgfarm-api-key: ${{ secrets.ORG_FARM_API_KEY }}
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
           package-updater: install-dependencies-action
           preserve-org: ${{ inputs.preserve-org }}
 
       - name: 🔭 Install package version to scratch org 👩‍🚀
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
-        uses: ncino/action-org-setup/org-install-package-action@v3
+        uses: ncino/action-org-setup/org-install-package-action@v5
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
+          github-token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
           package: ${{ steps.create-package.outputs.version-id }}
-          target-org: ${{ steps.setup-org.outputs.username }}
-          wait: 120
+          skip-handlers: FeatureEnforcement
+          sftd-api-key: ${{ secrets.SFTD_API_KEY }}
+          wait: -1
 
       - name: 🧪 Force Apex Tests 🧪
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
         uses: ncino/action-force-apex-tests@v4
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
 
       #######################################################
       ######         🧼 POST-BUILD CLEANUP 🧹          ######
