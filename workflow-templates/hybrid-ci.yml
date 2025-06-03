@@ -64,13 +64,10 @@ concurrency:
 
 env:
   COMMIT_SHA1: ${{ github.sha }}
-  DD_AGENT_MAJOR_VERSION: '7'
-  DD_API_KEY: '${{ secrets.DD_API_KEY }}'
-  DD_APP_KEY: '${{ secrets.DD_APP_KEY }}'
-  DD_SITE: datadoghq.com
   DEVOPS_SCRIPTS_PATH: './devops-utility-belt/scripts'
   GIT_BASE_BRANCH: ${{ github.base_ref }}
-  GIT_BRANCH: ${{ github.ref_name }}
+  GIT_BASE_COMMIT: ${{ github.event.pull_request.base.sha }}
+  GIT_BRANCH: ${{ github.head_ref }}
   RELEASE_FULLNAME: $PACKAGE_NAME
   REPO_NAME: ${{ github.event.repository.name }}
 
@@ -96,7 +93,8 @@ jobs:
           sparse-checkout: 'sfdx-project.json'
 
       - name: Get Namespace
-        run: echo "NAMESPACE=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_ENV
+        id: get-namespace
+        run: echo "NAMESPACE=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_OUTPUT
 
       # Uses the action by @dorny to filter paths
       # More info can be found at https://github.com/dorny/paths-filter
@@ -106,17 +104,17 @@ jobs:
         with:
           filters: |
             apex-changed:
-              - "src/${{ env.NAMESPACE }}/**/*.cls"
-              - "src/${{ env.NAMESPACE }}/**/*.trigger"
-              - "src/${{ env.NAMESPACE }}/**/*.component"
-              - "src/${{ env.NAMESPACE }}/**/*.page"
-              - "src/${{ env.NAMESPACE }}/**/*.*-meta.xml"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.cls"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.trigger"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.component"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.page"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.*-meta.xml"
             markdown-changed:
               - '**/*.md'
             non-markdown-changed:
               - '!**/*.md'
           list-files: 'json'
-          token: ${{ env.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
   CI-build-and-test:
     needs: Path-Filtering
@@ -150,9 +148,10 @@ jobs:
           ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
           ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
           dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
-          setup-salesforce-version: latest
+          ncino-cli-install: "true"
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
 
       #######################################################
       ######          🏗️ BUILD AND PACKAGE 📦          ######
@@ -174,12 +173,14 @@ jobs:
         uses: ncino/action-org-setup/org-provision-action@v5
         with:
           clean-org: ${{ inputs.clean-org }}
-          github-token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
           has-namespace: false
           orgfarm-api-key: ${{ secrets.ORG_FARM_API_KEY }}
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
-          package-updater: install-dependencies-action
-          preserve-org: ${{ inputs.preserve-org }}
+          package-updater: "ncino CLI"
+          sftd-api-key: ${{ secrets.SFTD_API_KEY }}
+          skip-npm-install: "true"
+          skip-python-install: "true"
 
       - name: 🔭 Install package version to scratch org 👩‍🚀
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
@@ -190,6 +191,7 @@ jobs:
           package: ${{ steps.create-package.outputs.version-id }}
           skip-handlers: FeatureEnforcement
           sftd-api-key: ${{ secrets.SFTD_API_KEY }}
+          skip-npm-install: "true"
           wait: -1
 
       - name: 🧪 Force Apex Tests 🧪
@@ -197,15 +199,14 @@ jobs:
         uses: ncino/action-force-apex-tests@v4
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
-        env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          skip-python-install: true
 
       #######################################################
       ######         🧼 POST-BUILD CLEANUP 🧹          ######
       #######################################################
       - name: 🧹 Post Build Cleanup 🧹
         if: always()
-        uses: ncino/action-org-setup/org-cleanup-action@v3
+        uses: ncino/action-org-setup/org-cleanup-action@v5
         with:
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
           orgfarm-api-key: '${{ secrets.ORG_FARM_API_KEY }}'
