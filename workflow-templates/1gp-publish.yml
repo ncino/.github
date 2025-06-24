@@ -1,292 +1,295 @@
 #* This workflow will run when a dev-branch is merged into release a
 #* feature-branch or the release branch. Jobs run in following order:
 #*   1. commit-lint: checks commit messages for semantic release.
-#*   2. merge-ci: runs the ci build to test feature branch changes on merge.
-#*   3. swordfish: gets the next version and transitions tickets to packaging.
-#*   4. publish-package: deploys the package to the packaging org and publishes PLM record.
-#*   5. publish-release: Publishes the github release and transitions tickets to verification.
+#*   2. transition-to-packaging: synchronizes the package version and transitions tickets to packaging.
+#*   3. publish-package: deploys the package to the packaging org.
+#*   4. transition-to-verification: Publishes as the releases to Github and PLM and transitions tickets to verification.
 
 name: 📚 1GP Publish 📝
 on:
- push:
-  branches:
-   - release
+  push:
+    branches:
+      - release
 
 env:
- COMMIT_SHA1: ${{ github.sha }}
- GIT_BRANCH: ${{ github.ref_name }}
- REPO_NAME: ${{ github.event.repository.name }}
- RELEASE_FULLNAME: '<< PACKAGE FULLNAME HERE >>'
- DX_MDAPI_DEPLOY: 'true'
- NAMESPACE: '<< NAMESPACE HERE >>'
- DELIVERY_SCRIPTS_PATH: './devops-utility-belt/scripts'
- GITHUB_TOKEN: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
+  COMMIT_SHA1: ${{ github.sha }}
+  GIT_BRANCH: ${{ github.ref_name }}
+  REPO_NAME: ${{ github.event.repository.name }}
+  RELEASE_FULLNAME: '<< PACKAGE FULLNAME HERE >>'
+  DX_MDAPI_DEPLOY: 'true'
+  NAMESPACE: '<< NAMESPACE HERE >>'
+  DELIVERY_SCRIPTS_PATH: './devops-utility-belt/scripts'
+  GITHUB_TOKEN: '${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
- commit-lint:
-  name: 📝  Commit Lint
-  uses: ncino/force-nCino/.github/workflows/commit-lint.yml@release
-  secrets: inherit
-  permissions:
-   contents: read
-   pull-requests: read
+  #########################################################
+  ######## 📝 Commit Lint 📝 #########
+  #########################################################
+  commit-lint:
+    name: 📝  Commit Lint
+    uses: ncino/force-nplmt/.github/workflows/commit-lint.yml@release
+    secrets: inherit
+    permissions:
+      contents: read
+      pull-requests: read
 
- swordfish:
-  needs: [commit-lint]
-  if: ${{ needs.commit-lint.outputs.release != 'NONE' }}
-  name: ⚔︎🐠 Get Next Version and Transition to Packaging
-  runs-on: ubuntu-latest
-  outputs:
-   jira-ticket-ids: ${{ steps.parse-inputs.outputs.jira-ticket-ids }}
-   version: ${{ steps.semantic-release.outputs.version }}
+  #########################################################
+  ######## 🐠⚔︎Transition to Packaging 🐠⚔︎ #########
+  #########################################################
+  transition-to-packaging:
+    name: 🐠⚔︎Transition to Packaging
+    needs: [commit-lint]
+    if: needs.commit-lint.outputs.release != 'NONE'
+    runs-on: ubuntu-latest
+    outputs:
+      jira-ticket-ids: ${{ steps.parse-inputs.outputs.jira-ticket-ids }}
+      tag: ${{ steps.swordfish-synchronizer.outputs.next-version }}
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          owner: ${{ github.repository_owner }}
+          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
 
-  steps:
-   - name: 🗃️ Checkout Code
-     uses: actions/checkout@v4
-     with:
-      fetch-depth: 0
-      token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+      - name: Checkout Release
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
-   - name: 🛠️ Force Repository Setup
-     uses: ncino/action-force-setup@v3
-     with:
-      ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
-      ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
-      dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
-     env:
-      GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+      - name: 📦 Get Package Info
+        id: get-package-info
+        run: |
+          set -e
+          echo "package-namespace=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_OUTPUT
 
-   - name: 🦃 Install Node 20 for Semantic Release
-     uses: actions/setup-node@v4
-     with:
-      node-version: 20
+      - name: Swordfish Synchronizer
+        id: swordfish-synchronizer
+        uses: ncino/action-swordfish/synchronizer@v1
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          packaging-org-auth-url: ${{ secrets.PACKAGING_AUTH_URL }}
+          namespace-prefix: ${{ env.NAMESPACE}}
+          spa-api-key: ${{ secrets.SPA_API_KEY }}
+          spa-api-url: ${{ vars.SPA_API_URL }}
 
-   - name: 🚛 Get Next Version
-     id: semantic-release
-     run: |
-      set -e
-      npx semantic-release --debug --dry-run >semantic-release.log
-      export NEXT_VERSION=$(cat semantic-release.log | grep -o "The next release version is [0-9]\+\.[0-9]\+\.[0-9]\+" | tr -d 'The next release version is ')
-      echo $NEXT_VERSION
-      echo "version=$(echo $NEXT_VERSION)" >> $GITHUB_OUTPUT
-     env:
-      GIT_AUTHOR_EMAIL: pdedevops@ncino.com
-      GIT_AUTHOR_NAME: ci-ncino
-      GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
-      NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+      - name: Print Outputs
+        run: |
+          echo "Previous Release was $PREVIOUS_RELEASE"
+          echo "Next Release is $NEXT_RELEASE"
+        env:
+          PREVIOUS_RELEASE: ${{ steps.swordfish-synchronizer.outputs.previous-version }}
+          NEXT_RELEASE: ${{ steps.swordfish-synchronizer.outputs.next-version }}
 
-   - name: 🔬 Run the Jira parsing action
-     id: parse-inputs
-     uses: ncino/action-jira-issue-parser@v1
-     env:
-      GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
-      HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-      JIRA_USER: ${{ secrets.JIRA_USER }}
-      JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
-     with:
-      pr-title: ${{ env.HEAD_COMMIT_MESSAGE }}
+      - name: Run the Jira parsing action
+        id: parse-inputs
+        uses: ncino/action-jira-issue-parser@v2
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          JIRA_USER: ${{ secrets.JIRA_USER }}
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+        with:
+          previous-release: ${{ steps.swordfish-synchronizer.outputs.previous-version }}
+          current-release: ${{ github.sha }}
 
-   - name: 🪬 Transition Jira Tickets
-     uses: ncino/action-jira-transition@v1
-     env:
-      JIRA_TRANSITION_WEBHOOK: ${{ secrets.JIRA_TRANSITION_WEBHOOK }}
-      PACKAGE_VERSION: ${{ steps.semantic-release.outputs.version }}
-      RELEASE_FULLNAME: ${{ env.RELEASE_FULLNAME }}
-     with:
-      issue-ids: ${{ steps.parse-inputs.outputs.jira-ticket-ids }}
-      new-status: 'Packaging'
+      - name: 🪬 Transition Jira Tickets
+        uses: ncino/action-jira-transition@v1
+        env:
+          JIRA_TRANSITION_WEBHOOK: ${{ secrets.JIRA_TRANSITION_WEBHOOK }}
+          JIRA_TRANSITION_SECRET: ${{ secrets.JIRA_TRANSITION_SECRET }}
+          RELEASE_FULLNAME: 'Product Lifecycle Manager'
+        with:
+          issue-ids: ${{ steps.parse-inputs.outputs.jira-ticket-ids }}
+          new-status: 'Packaging'
 
- # Can be the hybrid or 1gp ci workflow
- merge-ci:
-  name: 🔄  Merge CI
-  needs: [commit-lint]
-  uses: ncino/<< REPO NAME HERE >>/.github/workflows/1gp-ci.yml@release
-  secrets: inherit
-  permissions:
-   id-token: write
-   contents: read
+  #########################################################
+  ######## 🚀 Publish Package to Packaging Org 🚀 #########
+  #########################################################
+  publish-package:
+    name: 🚀 Publish Package to Packaging Org 🚀
+    needs: [draft-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
 
- publish-package:
-  name: 🚀 Publish Package to Packaging Org 🚀
-  needs: [draft-release, merge-ci]
-  runs-on: ubuntu-latest
-  steps:
-   - uses: actions/create-github-app-token@v1
-     id: app-token
-     with:
-      app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
-      private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
+      - name: 🗃️ Checkout Repo 🗃️
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.draft-release.outputs.tag }}
+          token: ${{ steps.app-token.outputs.token }}
 
-   - name: 🗃️ Checkout Repo 🗃️
-     uses: actions/checkout@v4
-     with:
-      ref: ${{ needs.draft-release.outputs.tag }}
-      token: ${{ steps.app-token.outputs.token }}
+      - name: 🛠️ Force Repository Setup 🛠️
+        uses: ncino/action-force-setup@v3
+        with:
+          ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
+          ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
+          dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
 
-   - name: 🛠️ Force Repository Setup 🛠️
-     uses: ncino/action-force-setup@v3
-     with:
-      ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
-      ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
-      dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
+      - name: 🏷️ Get Commit Sha from Tag 🏷️
+        id: get-commit-sha
+        run: echo "commit-sha=$(git rev-list -n 1 ${{ needs.draft-release.outputs.tag }})" >> $GITHUB_OUTPUT
 
-   - name: 🏷️ Get Commit Sha from Tag 🏷️
-     id: get-commit-sha
-     run: echo "commit-sha=$(git rev-list -n 1 ${{ needs.draft-release.outputs.tag }})" >> $GITHUB_OUTPUT
+      - name: 🗣️ Echo important data 📣
+        id: echo-data
+        run: |
+          echo "🚨 COMMIT_SHA1 = ${{ github.sha }} 🚨"
+          echo "GIT_BRANCH: $GIT_BRANCH"
+          echo "PACKAGE_VERSION: ${{ needs.transition-to-packaging.outputs.version}}"
+          packageMetadataId=$(jq -r '.plugins.subscriberPackageId' sfdx-project.json)
+          echo "PACKAGE_METADATA_ID: $packageMetadataId"
+          echo "package-metadata-id=$packageMetadataId" >> $GITHUB_OUTPUT
+          echo "REPO_NAME: $REPO_NAME"
 
-   - name: 🗣️ Echo important data 📣
-     id: echo-data
-     run: |
-      echo "🚨 COMMIT_SHA1 = ${{ github.sha }} 🚨"
-      echo "GIT_BRANCH: $GIT_BRANCH"
-      echo "PACKAGE_VERSION: ${{ needs.swordfish.outputs.version}}"
-      packageMetadataId=$(jq -r '.plugins.subscriberPackageId' sfdx-project.json)
-      echo "PACKAGE_METADATA_ID: $packageMetadataId"
-      echo "package-metadata-id=$packageMetadataId" >> $GITHUB_OUTPUT
-      echo "REPO_NAME: $REPO_NAME"
+      - name: 📦 Auth to packaging org 📦
+        run: |
+          echo "${{ secrets.PACKAGING_AUTH_URL }}" >auth.key
+          sf auth sfdxurl store --sfdx-url-file auth.key --set-default
+          rm auth.key
 
-   - name: 📦 Auth to packaging org 📦
-     run: |
-      echo "${{ secrets.PACKAGING_AUTH_URL }}" >auth.key
-      sf auth sfdxurl store --sfdx-url-file auth.key --set-default
-      rm auth.key
+      - name: 🔐 Enforce platform encryption 🚓
+        run: $DELIVERY_SCRIPTS_PATH/enforce_platform_encryption.py
+        env:
+          CODEBUILD_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
+          DEVOPS_SCRIPTS_PATH: '.'
+          PLATFORM_ENCRYPTION_FAILURE_NOTIFICATION_CHANNEL: devops-alerts
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-   - name: 🔐 Enforce platform encryption 🚓
-     run: $DELIVERY_SCRIPTS_PATH/enforce_platform_encryption.py
-     env:
-      CODEBUILD_URL: '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'
-      DEVOPS_SCRIPTS_PATH: '.'
-      PLATFORM_ENCRYPTION_FAILURE_NOTIFICATION_CHANNEL: devops-alerts
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: 🍣 Setup Node Again 👌
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-   - name: 🍣 Setup Node Again 👌
-     uses: actions/setup-node@v4
-     with:
-      node-version: 20
+      - name: 📇 Configure .npmrc file 📜
+        run: $DELIVERY_SCRIPTS_PATH/npm_auth.sh
 
-   - name: 📇 Configure .npmrc file 📜
-     run: $DELIVERY_SCRIPTS_PATH/npm_auth.sh
+      - name: 🆙 Update deps in packaging org 🆙
+        run: |
+          npm i -g @ncino/cli
+          username=$(sf org display --json | jq -r '.result.username')
+          ncino package install -o $username -w -1
+        env:
+          SFTD_API_KEY: ${{ secrets.SFTD_API_KEY }}
 
-   - name: 🆙 Update deps in packaging org 🆙
-     run: |
-      npm i -g @ncino/cli
-      username=$(sf org display --json | jq -r '.result.username')
-      ncino package install -o $username -w -1
-     env:
-      SFTD_API_KEY: ${{ secrets.SFTD_API_KEY }}
+      - name: 🌊 Remove Unchanged Flows 🌊
+        run: $DELIVERY_SCRIPTS_PATH/remove_unchanged_flows.py
+        env:
+          PACKAGE_VERSION: ${{ needs.transition-to-packaging.outputs.version }}
 
-   - name: 🌊 Remove Unchanged Flows 🌊
-     run: $DELIVERY_SCRIPTS_PATH/remove_unchanged_flows.py
-     env:
-      PACKAGE_VERSION: ${{ needs.swordfish.outputs.version }}
+      - name: ✔︎ Validate XML
+        uses: ncino/action-validate-xml@v1
 
-   - name: ✔︎ Validate XML
-     uses: ncino/action-validate-xml@v1
+      - name: 🪄 Convert source to metadata format 🤹‍♂️
+        id: convert-source
+        run: |
+          jq -r '.packageDirectories[] | select(.default == true)' sfdx-project.json >defaultPackage.json
+          srcPath=$(jq -r '.path' defaultPackage.json)
+          packageName=$(jq -r '.package' defaultPackage.json)
+          mkdir dx && mv $srcPath dx/ && rm -rf src/unpackaged defaultPackage.json
+          sed -i -e "s/src/dx/" sfdx-project.json
+          sf project convert source --root-dir dx/ --output-dir src/ --package-name "$packageName"
+          sed -i -e "s/<fullName>/<postInstallClass>PackageInstallHandler<\/postInstallClass><fullName>/" src/package.xml
+          package-xml-corrector
+          mv config/destructiveChanges*.xml src/
+          echo "status=success" >> $GITHUB_OUTPUT
 
-   - name: 🪄 Convert source to metadata format 🤹‍♂️
-     id: convert-source
-     run: |
-      jq -r '.packageDirectories[] | select(.default == true)' sfdx-project.json >defaultPackage.json
-      srcPath=$(jq -r '.path' defaultPackage.json)
-      packageName=$(jq -r '.package' defaultPackage.json)
-      mkdir dx && mv $srcPath dx/ && rm -rf src/unpackaged defaultPackage.json
-      sed -i -e "s/src/dx/" sfdx-project.json
-      sf project convert source --root-dir dx/ --output-dir src/ --package-name "$packageName"
-      sed -i -e "s/<fullName>/<postInstallClass>PackageInstallHandler<\/postInstallClass><fullName>/" src/package.xml
-      package-xml-corrector
-      mv config/destructiveChanges*.xml src/
-      echo "status=success" >> $GITHUB_OUTPUT
+      - name: 🗄️ Upload package.xml artifact 📂
+        if: steps.convert-source.outputs.status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ncino-package-xml
+          path: src/package.xml
 
-   - name: 🗄️ Upload package.xml artifact 📂
-     if: steps.convert-source.outputs.status == 'success'
-     uses: actions/upload-artifact@v4
-     with:
-      name: ncino-package-xml
-      path: src/package.xml
+      - name: 🚀 Deploy to packaging org 🚀
+        run: sf project deploy start --metadata-dir src/ --wait 400 --ignore-warnings
 
-   - name: 🚀 Deploy to packaging org 🚀
-     run: sf project deploy start --metadata-dir src/ --wait 400 --ignore-warnings
+      - name: 🔼 Upload package in packaging org 🔼
+        run: |
+          pip install pyyaml
+          $DELIVERY_SCRIPTS_PATH/sf_package_uploader.py \
+            --package-metadata-id ${{ steps.echo-data.outputs.package-metadata-id }} \
+            --package-version ${{ needs.transition-to-packaging.outputs.version }} \
+            --prefix RELEASE \
+            --plm-api-key ${{ secrets.PLM_API_KEY }} \
+            --generate-password \
+            --add-plm-record
+        env:
+          PLM_API_BASE_URL: ${{ secrets.PLM_API_ENDPOINT }}
 
-   - name: 🔼 Upload package in packaging org 🔼
-     run: |
-      pip install pyyaml
-      $DELIVERY_SCRIPTS_PATH/sf_package_uploader.py \
-        --package-metadata-id ${{ steps.echo-data.outputs.package-metadata-id }} \
-        --package-version ${{ needs.swordfish.outputs.version }} \
-        --prefix RELEASE \
-        --plm-api-key ${{ secrets.PLM_API_KEY }} \
-        --generate-password \
-        --add-plm-record
-     env:
-      PLM_API_BASE_URL: ${{ secrets.PLM_API_ENDPOINT }}
-
-   - name: Build Notifications
-     if: always()
-     run: |
-      if [[ "${{ job.status }}" == "failure" ]]; then
-        touch /tmp/build_failures.txt
-      fi
-      $DELIVERY_SCRIPTS_PATH/build_notifications.py
-     env:
-      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-      CI_SOURCE_DIRECTORY: ${{ github.workspace }}
-      SWORDFISH_BUILD: true
-      CI_BRANCH: ${{ env.GIT_BRANCH }}
-      CI_BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Build Notifications
+        if: always()
+        run: |
+          if [[ "${{ job.status }}" == "failure" ]]; then
+            touch /tmp/build_failures.txt
+          fi
+          $DELIVERY_SCRIPTS_PATH/build_notifications.py
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          CI_SOURCE_DIRECTORY: ${{ github.workspace }}
+          SWORDFISH_BUILD: true
+          CI_BRANCH: ${{ env.GIT_BRANCH }}
+          CI_BUILD_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
   ###############################################
-  ######## 🎊 Publish GITHUB RELEASE 🎉 #########
+  ######## 🎊 PUBLISH GITHUB RELEASE 🎉 #########
   ###############################################
-  publish-release:
-   name: 🎉 Publish Github Release and Transition to Verification
-   runs-on: ubuntu-latest
-   needs: [publish-package, swordfish]
-   steps:
-    - name: 🗃️ Checkout Code
-      uses: actions/checkout@v4
-      with:
-       fetch-depth: 0
-       token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+  transition-to-verification:
+    name: 🎉 Transition to Verification
+    runs-on: ubuntu-latest
+    needs: [publish-package, transition-to-packaging]
+    steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          owner: ${{ github.repository_owner }}
+          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
 
-    - name: 🛠️ Force Repository Setup
-      uses: ncino/action-force-setup@v3
-      with:
-       ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
-       ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
-       dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
-      env:
-       GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+      - name: 🗃️ Checkout Repo 🗃️
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
-    - name: 🦃 Install Node 20 for Semantic Release
-      uses: actions/setup-node@v4
-      with:
-       node-version: 20
+      - name: 'Get Package Info'
+        id: get-package-info
+        run: |
+          set -e
+          echo "sfdx-project-json=$(jq . -cr sfdx-project.json)" >> $GITHUB_OUTPUT
 
-    - name: 🚛 Semantic Release
-      id: semantic-release
-      run: |
-       set -e
-       npx semantic-release --debug >semantic-release.log
-       echo "url=$(cat semantic-release.log | grep -o 'https.*/tag/.*' | tr -d '\n')" >> $GITHUB_OUTPUT
-       echo "tag=$(cat semantic-release.log | grep -o '/tag/.*' | tr -d '/tag/')" >> $GITHUB_OUTPUT
-      env:
-       GIT_AUTHOR_EMAIL: pdedevops@ncino.com
-       GIT_AUTHOR_NAME: ci-ncino
-       GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
-       NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+      - name: 🎥 Create Records 🎥
+        uses: ncino/action-swordfish/release@feat/DO-3754/cmitzel
+        with:
+          spa-api-key: ${{ secrets.SPA_API_KEY }}
+          spa-api-url: ${{ vars.SPA_API_URL }}
+          subscriber-package-id: '${{ needs.publish-package.outputs.subscriber-package-id }}'
+          version: ${{ needs.transition-to-packaging.outputs.tag }}
+          commit-sha: ${{ github.sha }}
+          github-token: ${{ steps.app-token.outputs.token }}
+          generate-release-notes: true
+          package-version-info: ${{ needs.publish-package.outputs.package-version-info }}
+          sfdx-project-json: ${{ steps.get-package-info.outputs.sfdx-project-json }}
+          jira-ticket-ids: ${{ needs.transition-to-packaging.outputs.jira-ticket-ids }}
 
-    - name: 📝 Release Summary
-      run: |
-       echo "## ✏️ ✅ Published Release 📦
-         * [${{ steps.semantic-release.outputs.tag }}](${{ steps.semantic-release.outputs.url }})
-       " >> $GITHUB_STEP_SUMMARY
+      - name: 🪬 Transition Jira Tickets
+        uses: ncino/action-jira-transition@v1
+        env:
+          JIRA_TRANSITION_WEBHOOK: ${{ secrets.JIRA_TRANSITION_WEBHOOK }}
+          JIRA_TRANSITION_SECRET: ${{ secrets.JIRA_TRANSITION_SECRET }}
+          PACKAGE_VERSION: ${{ needs.transition-to-packaging.outputs.tag }}
+          RELEASE_FULLNAME: ${{ env.RELEASE_FULLNAME }}
+        with:
+          issue-ids: ${{ needs.transition-to-packaging.outputs.jira-ticket-ids }}
+          new-status: 'Verification'
 
-    - name: 🪬 Transition Jira Tickets
-      uses: ncino/action-jira-transition@v1
-      env:
-       JIRA_TRANSITION_WEBHOOK: '${{ secrets.JIRA_TRANSITION_WEBHOOK }}'
-       PACKAGE_VERSION: ${{ steps.semantic-release.outputs.tag }}
-       RELEASE_FULLNAME: ${{ env.RELEASE_FULLNAME }}
-      with:
-       issue-ids: ${{ needs.swordfish.outputs.jira-ticket-ids }}
-       new-status: 'Verification'
+      - name: ✅🔎 Send Success QA Notifications
+        uses: ncino/action-slack-notification@v1
+        with:
+          slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          slack-channel-name: ${{ env.QA_SLACK_CHANNEL }}
+          slack-message: "✅📦 Package creation for ${{ env.RELEASE_FULLNAME }}${{ needs.transition-to-packaging.outputs.tag }} succeeded\n 🔗🌐 Release Summary: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.transition-to-packaging.outputs.tag }}"
