@@ -67,14 +67,9 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
 
 env:
-  DD_AGENT_MAJOR_VERSION: "7"
-  DD_API_KEY: "${{ secrets.DD_API_KEY }}"
-  DD_APP_KEY: "${{ secrets.DD_APP_KEY }}"
-  DD_SITE: datadoghq.com
   DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
   GIT_BASE_BRANCH: ${{ github.base_ref }}
-  GIT_BRANCH: ${{ github.ref_name }}
-  GITHUB_TOKEN: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+  GIT_BRANCH: ${{ github.head_ref }}
   RELEASE_FULLNAME: nCino Companies House (UK)
   REPO_NAME: ${{ github.event.repository.name }}
 
@@ -86,14 +81,22 @@ jobs:
       non-markdown-changed: ${{ steps.path-filtering.outputs.non-markdown-changed }}
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          owner: ${{ github.repository_owner }}
+          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
+
       - name: 🫥 Checkout repo 😐
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           sparse-checkout: "sfdx-project.json"
 
       - name: Get Namespace
-        run: echo "NAMESPACE=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_ENV
+        id: get-namespace
+        run: echo "NAMESPACE=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_OUTPUT
 
       # Uses the action by @dorny to filter paths
       # More info can be found at https://github.com/dorny/paths-filter
@@ -103,17 +106,17 @@ jobs:
         with:
           filters: |
             apex-changed:
-              - "src/${{ env.NAMESPACE }}/**/*.cls"
-              - "src/${{ env.NAMESPACE }}/**/*.trigger"
-              - "src/${{ env.NAMESPACE }}/**/*.component"
-              - "src/${{ env.NAMESPACE }}/**/*.page"
-              - "src/${{ env.NAMESPACE }}/**/*.*-meta.xml"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.cls"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.trigger"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.component"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.page"
+              - "src/${{ steps.get-namespace.outputs.NAMESPACE }}/**/*.*-meta.xml"
             markdown-changed:
               - '**/*.md'
             non-markdown-changed:
               - '!**/*.md'
-          list-files: "json"
-          token: ${{ env.GITHUB_TOKEN }}
+          list-files: 'json'
+          token: ${{ steps.app-token.outputs.token }}
 
   CI-build-and-test:
     needs: Path-Filtering
@@ -125,24 +128,33 @@ jobs:
       #######################################################
       ######   🚧 SETUP AND INSTALL DEPENDENCIES 📀    ######
       #######################################################
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          owner: ${{ github.repository_owner }}
           private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
 
       - name: 🗃️ Checkout Repo 🗃️
         uses: actions/checkout@v4
         with:
-          token: "${{ steps.app-token.outputs.token }}"
+          token: ${{ steps.app-token.outputs.token }}
           ref: ${{ inputs.ref }}
 
       - name: 🛠️ Force Repository Setup 🛠️
-        uses: ncino/action-force-setup@v3
+        uses: ncino/action-force-setup@v4
         with:
-          dev-hub-auth-url: "${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}"
+          ci-github-app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
+          ci-github-app-private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
           ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
           ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
+          dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
+          ncino-cli-install: 'true'
+          op-service-account-token: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+          setup-1password: 'true'
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
 
       #######################################################
       ######          🏗️ BUILD AND PACKAGE 📦          ######
@@ -167,11 +179,13 @@ jobs:
         with:
           clean-org: ${{ inputs.clean-org }}
           has-namespace: true
-          github-token: "${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}"
+          github-token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
           orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
           preserve-org: ${{ inputs.preserve-org }}
           sftd-api-key: ${{ secrets.SFTD_API_KEY }}
+          skip-npm-install: 'true'
+          skip-python-install: 'true'
 
       - name: 🚢 Deploy source and encrypt 💼
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
@@ -182,14 +196,19 @@ jobs:
         uses: ncino/action-force-apex-tests@v4
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
+          skip-python-install: 'true'
 
       #######################################################
       ######         🧼 POST-BUILD CLEANUP 🧹          ######
       #######################################################
       # 🏁 Artifact Upload Phase 🏁
       - name: 🤙 Upload Artifact and trigger packaging 🏄‍♂️
-        if: ${{ github.ref_name == 'release' }} && success()
+        if: ${{ github.ref_name == 'release' && success() }}
         uses: ncino/action-aws/s3_trigger_pipeline@v3
+        with:
+          commit-sha1: ${{ env.COMMIT_SHA1 }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
 
       - name: 🧹 Post Build Cleanup 🧹
         if: always()
