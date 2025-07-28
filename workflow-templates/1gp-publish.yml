@@ -277,6 +277,7 @@ jobs:
           echo "sfdx-project-json=$(jq . -cr sfdx-project.json)" >> $GITHUB_OUTPUT
 
       - name: 🎥 Create Records 🎥
+        id: create-records
         uses: ncino/action-swordfish/release@v1
         with:
           spa-api-key: ${{ secrets.SPA_API_KEY }}
@@ -305,4 +306,4 @@ jobs:
         with:
           slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           slack-channel-name: ${{ env.QA_SLACK_CHANNEL }}
-          slack-message: "✅📦 Package creation for ${{ env.RELEASE_FULLNAME }}${{ needs.transition-to-packaging.outputs.tag }} succeeded\n 🔗🌐 Release Summary: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.transition-to-packaging.outputs.tag }}\n 🔗🌐 PLM Record: ${{ steps.create-release.outputs.plm-record-url }}"
+          slack-message: "✅📦 Package creation for ${{ env.RELEASE_FULLNAME }}${{ needs.transition-to-packaging.outputs.tag }} succeeded\n 🔗🌐 Release Summary: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ needs.transition-to-packaging.outputs.tag }}\n 🔗🌐 PLM Record: ${{ steps.create-records.outputs.plm-record-url }}"
