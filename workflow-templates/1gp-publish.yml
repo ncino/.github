@@ -1,10 +1,8 @@
-
 #* This workflow will run when a dev-branch is merged into the release branch. Jobs run in following order:
 #*   1. commit-lint: checks commit messages for semantic release.
 #*   2. swordfish: Determines the version and transitions tickets to packaging.
 #*   3. publish-package: deploys the package to the packaging org.
 #*   4. release: Publishes the release and transitions tickets to verification
-
 
 name: 📚 1GP Publish 📝
 on:
@@ -22,7 +20,6 @@ env:
   REPO_NAME: ${{ github.event.repository.name }}
   QA_SLACK_CHANNEL: '<YOUR_SLACK_CHANNEL_HERE>'
   QA_FAILURE_SLACK_CHANNEL: '<YOUR_SLACK_CHANNEL_HERE>'
-
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -44,7 +41,8 @@ jobs:
   ##########################################################
   swordfish:
     name: ⚔️🐠 Transition to Packaging ⚔️🐠
-    needs: [commit-lint]    if: needs.commit-lint.outputs.release != 'NONE'
+    needs: [commit-lint]
+    if: needs.commit-lint.outputs.release != 'NONE'
     runs-on: ubuntu-latest
     outputs:
       jira-ticket-ids: ${{ steps.parse-inputs.outputs.jira-ticket-ids }}
@@ -89,7 +87,6 @@ jobs:
           jira-user: ${{ secrets.JIRA_USER }}
           jira-token: ${{ secrets.JIRA_TOKEN }}
           jira-base-url: 'https://ncinodev.atlassian.net'
-
 
       - name: 🪬 Transition Jira Tickets
         uses: ncino/action-jira-transition@v1
@@ -184,7 +181,7 @@ jobs:
 
       - name: ✔︎ Validate XML
         uses: ncino/action-validate-xml@v1
-        
+
       - name: 🪄 Convert source to metadata format 🤹‍♂️
         id: convert-source
         run: |
@@ -203,7 +200,6 @@ jobs:
           DX_MDAPI_DEPLOY: 'true'
           SRC_DIRECTORY: 'src/{{ REPLACE_PACKAGE_NAMESPACE }}'
           POST_INSTALL_CLASS: 'PackageDataInstaller'
-
 
       - name: 🗄️ Upload package.xml artifact 📂
         if: steps.convert-source.outputs.status == 'success'
@@ -232,7 +228,6 @@ jobs:
           subscriber-package-id: ${{ steps.echo-data.outputs.subscriber-package-id }}
           version: ${{ needs.swordfish.outputs.tag }}
 
-
       - name: ?🔎 Send upload failure QA notifications
         uses: ncino/action-slack-notification@v1
         if: always() && steps.upload-package.outcome != 'success'
@@ -240,7 +235,6 @@ jobs:
           slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
           slack-channel-name: ${{ env.QA_FAILURE_SLACK_CHANNEL }}
           slack-message: "❗️📦 Package creation for ${{ env.RELEASE_FULLNAME }} ${{ needs.swordfish.outputs.tag }} failed on the package upload step.\n🔗🌐 Build Link: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-
 
   ###################################################
   ######## 🎊 Transition to Verification 🎉 #########
@@ -310,4 +304,3 @@ jobs:
     with:
       metadata-package-version-id: ${{ fromJSON(needs.publish-package.outputs.package-version-info).Id }}
     secrets: inherit
-
