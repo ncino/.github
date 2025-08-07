@@ -1,8 +1,7 @@
 name: ✓ Commit Lint
 on:
-    push:
-        branches:
-            - feature/*
+    merge_group:
+        types: [changes_requested]
 
     pull_request:
         branches:
@@ -16,7 +15,7 @@ on:
                 type: string
         outputs:
             release:
-                description: "Describes the highest level of semantic commit detected"
+                description: 'Describes the highest level of semantic commit detected'
                 value: ${ jobs.lint-commits.outputs.release }
 
 permissions:

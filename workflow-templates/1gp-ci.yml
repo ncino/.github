@@ -1,14 +1,12 @@
 name: 1GP CI build
 on:
-  push:
-    branches:
-      - release
-      - "*.*.x"
-
   pull_request:
     branches:
       - release
-      - "*.*.x"
+      - '*.*.x'
+
+  merge_group:
+    types: [changes_requested]
 
   workflow_dispatch:
     inputs:
@@ -56,18 +54,18 @@ on:
 
       auto-promote:
         description: Whether to auto promote the package
-        value: "false"
+        value: 'false'
 
 permissions:
   id-token: write # This is required for requesting the ID token for AWS actions
   contents: read # This is required for actions/checkout
 
 concurrency:
-  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
 
 env:
-  DEVOPS_SCRIPTS_PATH: "./devops-utility-belt/scripts"
+  DEVOPS_SCRIPTS_PATH: './devops-utility-belt/scripts'
   GIT_BASE_BRANCH: ${{ github.base_ref }}
   GIT_BRANCH: ${{ github.head_ref }}
   RELEASE_FULLNAME: nCino Companies House (UK)
@@ -92,7 +90,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
-          sparse-checkout: "sfdx-project.json"
+          sparse-checkout: 'sfdx-project.json'
 
       - name: Get Namespace
         id: get-namespace
@@ -180,7 +178,7 @@ jobs:
           clean-org: ${{ inputs.clean-org }}
           has-namespace: true
           github-token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
-          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
+          orgfarm-api-key: '${{ secrets.ORG_FARM_API_KEY }}'
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
           preserve-org: ${{ inputs.preserve-org }}
           sftd-api-key: ${{ secrets.SFTD_API_KEY }}
@@ -216,7 +214,7 @@ jobs:
         uses: ncino/action-org-setup/org-cleanup-action@v5
         with:
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
-          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
+          orgfarm-api-key: '${{ secrets.ORG_FARM_API_KEY }}'
           preserve-org: ${{ inputs.preserve-org }}
 
       - name: 📝 Export Summary 📝

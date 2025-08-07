@@ -148,7 +148,7 @@ jobs:
           ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
           ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
           dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
-          ncino-cli-install: "true"
+          ncino-cli-install: 'true'
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
@@ -177,10 +177,10 @@ jobs:
           has-namespace: false
           orgfarm-api-key: ${{ secrets.ORG_FARM_API_KEY }}
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
-          package-updater: "ncino CLI"
+          package-updater: 'ncino CLI'
           sftd-api-key: ${{ secrets.SFTD_API_KEY }}
-          skip-npm-install: "true"
-          skip-python-install: "true"
+          skip-npm-install: 'true'
+          skip-python-install: 'true'
 
       - name: 🔭 Install package version to scratch org 👩‍🚀
         if: ${{ needs.Path-Filtering.outputs.apex-changed == 'true' }}
@@ -191,7 +191,7 @@ jobs:
           package: ${{ steps.create-package.outputs.version-id }}
           skip-handlers: FeatureEnforcement
           sftd-api-key: ${{ secrets.SFTD_API_KEY }}
-          skip-npm-install: "true"
+          skip-npm-install: 'true'
           wait: -1
 
       - name: 🧪 Force Apex Tests 🧪
