@@ -287,8 +287,6 @@ jobs:
         with:
           issue-ids: ${{ needs.swordfish.outputs.jira-ticket-ids }}
           new-status: 'Verification'
-          PACKAGE_VERSION: ${{ needs.transition-to-packaging.outputs.tag }}
-          RELEASE_FULLNAME: ${{ env.RELEASE_FULLNAME }}
 
       - name: ✅🔎 Send Success QA Notifications
         uses: ncino/action-slack-notification@v1
