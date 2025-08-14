@@ -1,6 +1,9 @@
 name: Hybrid CI build
 
 on:
+  merge_group:
+    types: [changes_requested]
+
   pull_request:
     branches:
       - release
