@@ -87,7 +87,7 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
           jira-user: ${{ secrets.JIRA_USER }}
           jira-token: ${{ secrets.JIRA_TOKEN }}
-          jira-base-url: 'https://ncinodev.atlassian.net'
+          jira-base-url: ${{ vars.ATLASSIAN_BASE_URL }}
 
       - name: 🪬 Transition Jira Tickets
         uses: ncino/action-jira-transition@v1

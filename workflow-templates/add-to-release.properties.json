@@ -1,0 +1,7 @@
+{
+  "name": "Add Version to Release",
+  "description": "Adds a version to a release.",
+  "iconName": "tag",
+  "categories": ["ci", "deployments"],
+  "filePatterns": ["release.yml$"]
+}
