@@ -1,7 +1,7 @@
 name: ✓ Commit Lint
 on:
     merge_group:
-        types: [changes_requested]
+        types: [checks_requested]
 
     pull_request:
         branches:
@@ -16,18 +16,21 @@ on:
         outputs:
             release:
                 description: 'Describes the highest level of semantic commit detected'
-                value: ${ jobs.lint-commits.outputs.release }
+                value: ${{ jobs.lint-commits.outputs.release }}
 
 permissions:
     contents: read
     pull-requests: read
+    issues: write
 
 jobs:
     lint-commits:
         runs-on: ubuntu-latest
         outputs:
-            release: ${ steps.analyze-commits.outputs.release }
+            release: ${{ steps.analyze-commits.outputs.release }}
         steps:
             - name: Analyze Commits
               uses: ncino/semantic-commit-analyzer@v3
               id: analyze-commits
+              with:
+                  github-token: ${{ github.token }}
