@@ -68,7 +68,7 @@ env:
   DEVOPS_SCRIPTS_PATH: './devops-utility-belt/scripts'
   GIT_BASE_BRANCH: ${{ github.base_ref }}
   GIT_BRANCH: ${{ github.head_ref }}
-  RELEASE_FULLNAME: nCino Companies House (UK)
+  RELEASE_FULLNAME: { { REPLACE_PACKAGE_NAME } }
   REPO_NAME: ${{ github.event.repository.name }}
 
 jobs:
