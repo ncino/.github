@@ -6,7 +6,7 @@ on:
       - '*.*.x'
 
   merge_group:
-    types: [changes_requested]
+    types: [checks_requested]
 
   workflow_dispatch:
     inputs:
