@@ -1,38 +1,38 @@
 name: 🚚 Add Version to Release 🚚
 on:
- workflow_dispatch:
-  inputs:
-   release-id:
-    description: 'Release ID'
-    type: string
-    required: false
+  workflow_dispatch:
+    inputs:
+      release-id:
+        description: "Release ID"
+        type: string
+        required: false
 
-   metadata-package-version-id:
-    description: 'Metadata package version ID'
-    type: string
-    required: true
+      metadata-package-version-id:
+        description: "Metadata package version ID"
+        type: string
+        required: true
 
- workflow_call:
-  inputs:
-   metadata-package-version-id:
-    description: 'Metadata package version ID'
-    type: string
-    required: true
+  workflow_call:
+    inputs:
+      metadata-package-version-id:
+        description: "Metadata package version ID"
+        type: string
+        required: true
 
 jobs:
- add-package-version-to-release:
-  runs-on: ubuntu-latest
-  steps:
-   - name: Add Version to Release
-     id: add-package-version
-     uses: ncino/action-release-automation/add-package-version-to-release@v1
-     with:
-      release-id: ${{ inputs.release-id }}
-      release-type: ${{ vars.RELEASE_TYPE }}
-      metadata-package-version-id: ${{ inputs.metadata-package-version-id }}
-      spa-api-url: ${{ vars.SPA_API_URL }}
-      spa-api-key: ${{ secrets.SPA_API_KEY }}
+  Add-Package-Version-To-Release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add Version to Release
+        id: add-package-version
+        uses: ncino/action-release-automation/add-package-version-to-release@v1
+        with:
+          release-id: ${{ inputs.release-id }}
+          release-type: ${{ vars.RELEASE_TYPE }}
+          metadata-package-version-id: ${{ inputs.metadata-package-version-id }}
+          spa-api-url: ${{ vars.SPA_API_URL }}
+          spa-api-key: ${{ secrets.SPA_API_KEY }}
 
-   - name: Check Output
-     run: |
-      echo "Add version to release output: ${{ steps.add-package-version.outputs.result }}"
+      - name: Check Output
+        run: |
+          echo "Add version to release output: ${{ steps.add-package-version.outputs.result }}"
