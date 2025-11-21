@@ -1,0 +1,62 @@
+name: Path Filtering
+description: 'Filters paths based on the package namespace'
+inputs:
+  package-namespace:
+    description: 'The package namespace'
+    required: true
+    type: string
+outputs:
+  build-required:
+    description: 'Whether a build is required or not'
+    value: ${{ steps.set-build-required.outputs.build-required }}
+
+runs:
+  using: 'composite'
+  steps:
+    # Uses the action by @dorny to filter paths
+    # More info can be found at https://github.com/dorny/paths-filter
+    - name: Run Path Filtering
+      uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # current version 3.0.2
+      id: path-filtering
+      with:
+        filters: |
+          ci-changed:
+            - ".github/workflows/1gp-ci.yml"
+          non-markdown-changed:
+            - '!src/${{ inputs.package-namespace }}/**/*.md'
+          package-lock-json-changed:
+            - "package-lock.json"
+          packaged-changed:
+            - "src/${{ inputs.package-namespace }}/**"
+          sfdx-project-changed:
+            - "sfdx-project.json"
+        list-files: 'json'
+        token: '' # rely on git diff to filter paths
+
+    - name: 👷🏼‍♂️ Set Build Required 👷🏼‍♂️
+      id: set-build-required
+      run: |
+        BUILD_REQUIRED="false"
+        if [[ "$CI_CHANGED" == "true" ]] || \
+          [[ "$SFDX_PROJECT_CHANGED" == "true" ]] || \
+          [[ "$PACKAGE_LOCK_JSON_CHANGED" == "true" ]] || \
+          [[ "$PACKAGED_CHANGED" == "true" && "$NON_MARKDOWN_CHANGED" == "true" ]]; then
+          BUILD_REQUIRED="true"
+        fi
+
+        echo "CI_CHANGED: $CI_CHANGED"
+        echo "NON_MARKDOWN_CHANGED: $NON_MARKDOWN_CHANGED"
+        echo "PACKAGE_LOCK_JSON_CHANGED: $PACKAGE_LOCK_JSON_CHANGED"
+        echo "PACKAGED_CHANGED: $PACKAGED_CHANGED"
+        echo "SFDX_PROJECT_CHANGED: $SFDX_PROJECT_CHANGED"
+
+        echo "Build required: $BUILD_REQUIRED"
+
+        echo "build-required=$BUILD_REQUIRED" >> $GITHUB_OUTPUT
+      env:
+        CI_CHANGED: ${{ steps.path-filtering.outputs.ci-changed }}
+        NON_MARKDOWN_CHANGED: ${{ steps.path-filtering.outputs.non-markdown-changed }}
+        PACKAGE_LOCK_JSON_CHANGED: ${{ steps.path-filtering.outputs.package-lock-json-changed }}
+        PACKAGED_CHANGED: ${{ steps.path-filtering.outputs.packaged-changed }}
+        SFDX_PROJECT_CHANGED: ${{ steps.path-filtering.outputs.sfdx-project-changed }}
+      shell: bash
