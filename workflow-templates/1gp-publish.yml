@@ -178,11 +178,6 @@ jobs:
         env:
           SFTD_API_KEY: ${{ secrets.SFTD_API_KEY }}
 
-      - name: Running flow version notifications
-        run: |
-          pip install defusedxml
-          $DELIVERY_SCRIPTS_PATH/flow_version_notifications.py
-
       - name: 🪄 Convert source to metadata format 🤹‍♂️
         id: convert-source
         run: $DELIVERY_SCRIPTS_PATH/convert-source-to-mdapi.sh
