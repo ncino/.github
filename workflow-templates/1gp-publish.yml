@@ -252,18 +252,19 @@ jobs:
           path: src/package.xml
 
       - name: 🚀 Deploy to packaging org 🚀
-        id: deploy-to-packaging-org
-        run: sf project deploy start --metadata-dir src/ --wait 400 --ignore-warnings --verbose
-
-      - name: 🔎 Send deploy failure notification
-        uses: ncino/action-slack-notification@v1
-        if: always() && steps.deploy-to-packaging-org.outcome != 'success'
+        id: deploy-metadata
+        uses: ncino/action-swordfish/deploy-metadata@v1
         with:
-          slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          metadata-dir: src/
+
+      - name: ❗🔔 Send Deployment Failure Notifications
+        uses: ncino/action-slack-notification@v2
+        id: deployment-failure-notification
+        if: always() && steps.deploy-metadata.outcome == 'failure'
+        with:
+          slack-app-token: ${{ secrets.DELIVERY_SLACK_APP_TOKEN }}
           slack-channel-name: ${{ env.FAILURE_SLACK_CHANNEL }}
-          slack-message: "${{ env.MESSAGE }}\n🔗🌐 Build Link: ${{ env.BUILD_LINK }}"
-        env:
-          MESSAGE: "❗️📦 Package creation for ${{ env.PACKAGE_LABEL }} failed on the package deployment step."
+          slack-blocks: ${{ steps.deploy-metadata.outputs.failure-message-blocks }}
 
       - name: 🔼 Upload package in packaging org 🔼
         id: upload-package
@@ -271,17 +272,16 @@ jobs:
         with:
           packaging-org-auth-url: ${{ secrets.PACKAGING_ORG_AUTH_URL }}
           subscriber-package-id: ${{ env.SUBSCRIBER_PACKAGE_ID }}
-          version: ${{ env.PACKAGE_VERSION }}
+          version: ${{ needs.Sync-And-Transition-Tickets.outputs.tag }}
 
-      - name: 🔎 Send upload failure notification
-        uses: ncino/action-slack-notification@v1
-        if: always() && steps.upload-package.outcome != 'success'
+      - name: ❗🔔 Package Upload Failure Notifications
+        id: upload-failure-notification
+        uses: ncino/action-slack-notification@v2
+        if: always() && steps.upload-package.outcome == 'failure'
         with:
-          slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          slack-app-token: ${{ secrets.DELIVERY_SLACK_APP_TOKEN }}
           slack-channel-name: ${{ env.FAILURE_SLACK_CHANNEL }}
-          slack-message: "${{ env.MESSAGE }}\n🔗🌐 Build Link: ${{ env.BUILD_LINK }}"
-        env:
-          MESSAGE: "❗️📦 Package creation for ${{ env.PACKAGE_LABEL }} failed on the package upload step."
+          slack-blocks: ${{ steps.upload-package.outputs.failure-message-blocks }}
 
   ###################################################
   ######## 🎊 Transition to Verification 🎉 #########
@@ -316,32 +316,29 @@ jobs:
           spa-api-url: ${{ vars.SPA_API_URL }}
           subscriber-package-id: ${{ env.SUBSCRIBER_PACKAGE_ID }}
           version: ${{ env.PACKAGE_VERSION }}
-          commit-sha: ${{ env.COMMIT_SHA1 }}
+          commit-sha: ${{ github.sha }}
           github-token: ${{ steps.app-token.outputs.token }}
           generate-release-notes: true
-          package-version-info: ${{ needs.Publish-Package.outputs.package-version-info }}
+          package-version-info: ${{ needs.Package-Create.outputs.package-version-info }}
           sfdx-project-json: ${{ needs.Get-Package-Info.outputs.sfdx-project-json }}
 
-      - name: 🪬 Transition Jira Tickets
+      - name: 🪬 Transition Jira Tickets to Verification
         uses: ncino/action-jira-transition@v1
         env:
           JIRA_TRANSITION_WEBHOOK: ${{ secrets.JIRA_TRANSITION_WEBHOOK }}
           JIRA_TRANSITION_SECRET: ${{ secrets.JIRA_TRANSITION_SECRET }}
           RELEASE_FULLNAME: ${{ env.PACKAGE_NAME }}
         with:
-          issue-ids: ${{ needs.Swordfish.outputs.jira-ticket-ids }}
-          new-status: "Verification"
+          issue-ids: ${{ needs.Sync-And-Transition-Tickets.outputs.jira-ticket-ids }}
+          new-status: 'Verification'
 
       - name: ✅🔎 Send Success QA Notifications
-        uses: ncino/action-slack-notification@v1
+        id: success-notification
+        uses: ncino/action-slack-notification@v2
         with:
-          slack-webhook-url: ${{ secrets.SLACK_WEBHOOK_URL }}
+          slack-app-token: ${{ secrets.DELIVERY_SLACK_APP_TOKEN }}
           slack-channel-name: ${{ env.QA_SLACK_CHANNEL }}
-          slack-message: "${{ env.MESSAGE }}\n 🔗🌐 Release Summary: ${{ env.RELEASE_LINK }}\n ${{ env.PLM_RECORD }}"
-        env:
-          MESSAGE: "✅📦 Package creation for ${{ env.PACKAGE_LABEL }} succeeded"
-          RELEASE_LINK: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ env.PACKAGE_VERSION }}
-          PLM_RECORD: "🔗🌐 PLM Record: ${{ steps.create-records.outputs.plm-record-url }}"
+          slack-blocks: ${{ steps.create-records.outputs.success-message-blocks }}
 
   Add-To-Release:
     name: 🚚 Add to Release 🚚
