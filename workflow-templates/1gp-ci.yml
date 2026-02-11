@@ -3,7 +3,6 @@ on:
   pull_request:
     branches:
       - release
-      - "*.*.x"
 
   merge_group:
     types: [checks_requested]
@@ -26,24 +25,15 @@ on:
         type: boolean
         default: false
 
-concurrency:
-  group: "${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}"
-  cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
-
 permissions:
-  id-token: write # This is required for requesting the ID token for AWS actions
   contents: read # This is required for actions/checkout
 
-env:
-  COMMIT_SHA1: ${{ github.sha }}
-  DELIVERY_SCRIPTS_PATH: "./devops-utility-belt/scripts"
-  GIT_BASE_BRANCH: ${{ github.base_ref }}
-  GIT_BRANCH: ${{ github.head_ref }}
-  REPO_NAME: ${{ github.event.repository.name }}
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.ref != 'refs/heads/release' }}
 
 jobs:
   Get-Package-Info:
-    name: Get Package Info
     runs-on: ubuntu-latest
     outputs:
       package-name: ${{ steps.get-package-info.outputs.package-name }}
@@ -51,112 +41,40 @@ jobs:
       subscriber-package-id: ${{ steps.get-package-info.outputs.subscriber-package-id }}
       sfdx-project-json: ${{ steps.get-package-info.outputs.sfdx-project-json }}
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: app-token
-        with:
-          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
-          owner: ${{ github.repository_owner }}
-          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
-
-      - name: Checkout Release
+      - name: 🗃️ Checkout Repo 🗃️
         uses: actions/checkout@v5
-        with:
-          token: ${{ steps.app-token.outputs.token }}
 
       - name: Get Package Info
         id: get-package-info
-        run: |
-          set -e
-          echo "package-name=$(jq -r '.name' sfdx-project.json)" >> $GITHUB_OUTPUT
-          echo "package-namespace=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_OUTPUT
-          echo "subscriber-package-id=$(jq -r '.plugins.subscriberPackageId' sfdx-project.json)" >> $GITHUB_OUTPUT
-          echo "sfdx-project-json=$(jq . -cr sfdx-project.json)" >> $GITHUB_OUTPUT
-
-      - name: Print Package Info
-        run: |
-          echo "PACKAGE_NAME: $PACKAGE_NAME"
-          echo "PACKAGE_NAMESPACE: $PACKAGE_NAMESPACE"
-          echo "SUBSCRIBER_PACKAGE_ID: $SUBSCRIBER_PACKAGE_ID"
-          echo "SFDX_PROJECT_JSON: $SFDX_PROJECT_JSON"
-        env:
-          PACKAGE_NAME: ${{ steps.get-package-info.outputs.package-name }}
-          PACKAGE_NAMESPACE: ${{ steps.get-package-info.outputs.package-namespace }}
-          SUBSCRIBER_PACKAGE_ID: ${{ steps.get-package-info.outputs.subscriber-package-id }}
-          SFDX_PROJECT_JSON: ${{ steps.get-package-info.outputs.sfdx-project-json }}
+        uses: ./.github/actions/getPackageInfo
 
   Path-Filtering:
     needs: Get-Package-Info
-    outputs:
-      build-required: ${{ steps.set-build-required.outputs.build-required }}
     runs-on: ubuntu-latest
+    outputs:
+      build-required: ${{ steps.path-filter.outputs.build-required }}
     steps:
-      - uses: actions/create-github-app-token@v2
-        id: app-token
-        with:
-          app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
-          owner: ${{ github.repository_owner }}
-          private-key: ${{ secrets.NCINO_CI_GH_APP_SSH_PRIVATE_KEY }}
-
-      - name: 🫥 Checkout repo 😐
+      - name: 🗃️ Checkout Repo 🗃️
         uses: actions/checkout@v5
+
+      - name: Path Filtering
+        id: path-filter
+        uses: ./.github/actions/pathFiltering
         with:
-          token: ${{ steps.app-token.outputs.token }}
-          sparse-checkout: "sfdx-project.json"
-
-      - name: Run Path Filtering
-        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # current version 3.0.2
-        id: path-filtering
-        with:
-          filters: |
-            packaged-changed:
-              - "src/${{ env.NAMESPACE }}/**"
-            non-markdown-changed:
-              - '!**/*.md'
-            sfdx-project-changed:
-              - "sfdx-project.json"
-            package-lock-json-changed:
-              - "package-lock.json"
-          list-files: "json"
-          token: ${{ steps.app-token.outputs.token }}
-        env:
-          NAMESPACE: ${{ needs.Get-Package-Info.outputs.package-namespace }}
-
-      - name: 👷🏼‍♂️ Set Build Required 👷🏼‍♂️
-        id: set-build-required
-        run: |
-          SFDX_PROJECT_CHANGED="${{ steps.path-filtering.outputs.sfdx-project-changed }}"
-          PACKAGE_LOCK_JSON_CHANGED="${{ steps.path-filtering.outputs.package-lock-json-changed }}"
-          PACKAGED_CHANGED="${{ steps.path-filtering.outputs.packaged-changed }}"
-          NON_MARKDOWN_CHANGED="${{ steps.path-filtering.outputs.non-markdown-changed }}"
-
-          if [[ "$SFDX_PROJECT_CHANGED" == "true" ]] || \
-              [[ "$PACKAGE_LOCK_JSON_CHANGED" == "true" ]] || \
-              [[ "$PACKAGED_CHANGED" == "true" && "$NON_MARKDOWN_CHANGED" == "true" ]]; then
-              BUILD_REQUIRED="true"
-          else
-              BUILD_REQUIRED="false"
-          fi
-
-          echo "SFDX_PROJECT_CHANGED: $SFDX_PROJECT_CHANGED"
-          echo "PACKAGE_LOCK_JSON_CHANGED: $PACKAGE_LOCK_JSON_CHANGED"
-          echo "PACKAGED_CHANGED: $PACKAGED_CHANGED"
-          echo "NON_MARKDOWN_CHANGED: $NON_MARKDOWN_CHANGED"
-          echo "Build required: $BUILD_REQUIRED"
-
-          echo "build-required=$BUILD_REQUIRED" >> $GITHUB_OUTPUT
+          package-namespace: ${{ needs.Get-Package-Info.outputs.package-namespace }}
 
   Build-And-Test:
     needs: Path-Filtering
     if: ${{ github.event_name != 'pull_request' || needs.Path-Filtering.outputs.build-required == 'true' }}
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
+    env:
+      DELIVERY_SCRIPTS_PATH: './devops-utility-belt/scripts'
+      GIT_BASE_BRANCH: ${{ github.base_ref }}
+      GIT_BRANCH: ${{ github.head_ref || github.ref_name }}
+      REPO_NAME: ${{ github.event.repository.name }}
     steps:
-      #######################################################
-      ######   🚧 SETUP AND INSTALL DEPENDENCIES 📀    ######
-      #######################################################
-      - uses: actions/create-github-app-token@v2
+      - name: ☁️ Create GitHub App Token 🔓
+        uses: actions/create-github-app-token@v2
         id: app-token
         with:
           app-id: ${{ vars.NCINO_CI_GH_APP_ID }}
@@ -167,7 +85,6 @@ jobs:
         uses: actions/checkout@v5
         with:
           token: ${{ steps.app-token.outputs.token }}
-          ref: ${{ inputs.ref }}
 
       - name: 🛠️ Force Repository Setup 🛠️
         uses: ncino/action-force-setup@v4
@@ -177,16 +94,13 @@ jobs:
           ci-ncino-ssh-private-signing-key: ${{ secrets.CI_NCINO_SSH_PRIVATE_SIGNING_KEY }}
           ci-ncino-ssh-public-signing-key: ${{ secrets.CI_NCINO_SSH_PUBLIC_SIGNING_KEY }}
           dev-hub-auth-url: ${{ secrets.DEVOPS_DEV_HUB_AUTH_URL }}
-          ncino-cli-install: "true"
-          op-service-account-token: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-          setup-1password: "true"
+          ncino-cli-install: 'true'
+          ncino-cli-version: ${{ vars.NCINO_CLI_VERSION }}
+          setup-salesforce-version: ${{ vars.SF_CLI_VERSION }}
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
 
-      #######################################################
-      ######          🏗️ BUILD AND PACKAGE 📦          ######
-      #######################################################
       - name: 🕵️‍♀️ Validate config XML 🕵️‍♀️
         uses: ncino/action-validate-xml@v1
 
@@ -203,35 +117,31 @@ jobs:
         id: setup-org
         uses: ncino/action-org-setup/org-provision-action@v5
         with:
-          clean-org: ${{ inputs.clean-org }}
-          has-namespace: true
           github-token: ${{ secrets.CI_USER_REPO_ACCESS_TOKEN }}
-          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
+          orgfarm-api-key: ${{ secrets.ORG_FARM_API_KEY }}
           preserve-org: ${{ inputs.preserve-org }}
           sftd-api-key: ${{ secrets.SFTD_API_KEY }}
-          skip-npm-install: "true"
-          skip-python-install: "true"
+          skip-python-install: 'true'
+          clean-org: ${{ steps.determine-org-type.outputs.clean_org }}
 
-      - name: 🚢 Deploy source and encrypt 💼
+      - name: 🚢 Deploy source and encrypt 🚢
+        if: ${{ steps.setup-org.outcome == 'success' }}
         uses: ncino/action-org-setup/org-source-push-action@v5
 
-      - name: 🧪 Force Apex Tests 🧪
+      - name: 🤞 Force Apex Tests 🤞
+        if: ${{ steps.setup-org.outcome == 'success' }}
         uses: ncino/action-force-apex-tests@v5
         with:
           auth-url: ${{ steps.setup-org.outputs.auth-url }}
-          skip-python-install: "true"
+          skip-python-install: 'true'
 
-      #######################################################
-      ######         🧼 POST-BUILD CLEANUP 🧹          ######
-      #######################################################
       - name: 🧹 Post Build Cleanup 🧹
         if: always()
-        continue-on-error: true
         uses: ncino/action-org-setup/org-cleanup-action@v5
         with:
           orgfarm-api-url: ${{ vars.ORGFARM_API_URL }}
-          orgfarm-api-key: "${{ secrets.ORG_FARM_API_KEY }}"
+          orgfarm-api-key: ${{ secrets.ORG_FARM_API_KEY }}
           preserve-org: ${{ inputs.preserve-org }}
 
       - name: 📝 Export Summary 📝
@@ -240,7 +150,9 @@ jobs:
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "$(cat $GITHUB_STEP_SUMMARY)" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
+        shell: bash
 
       - name: 👏 Success Message 👏
-        if: success()
-        run: cat $DEVOPS_SCRIPTS_PATH/config/deploy_message.txt
+        if: ${{ success() }}
+        run: cat $DELIVERY_SCRIPTS_PATH/config/deploy_message.txt
+        shell: bash

@@ -1,0 +1,41 @@
+name: Get Package Info
+description: 'Extracts package information from sfdx-project.json'
+outputs:
+  package-name:
+    description: 'The package name from sfdx-project.json'
+    value: ${{ steps.get-package-info.outputs.package-name }}
+  package-namespace:
+    description: 'The package namespace from sfdx-project.json'
+    value: ${{ steps.get-package-info.outputs.package-namespace }}
+  subscriber-package-id:
+    description: 'The subscriber package ID from sfdx-project.json'
+    value: ${{ steps.get-package-info.outputs.subscriber-package-id }}
+  sfdx-project-json:
+    description: 'The complete sfdx-project.json content'
+    value: ${{ steps.get-package-info.outputs.sfdx-project-json }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get Package Info
+      id: get-package-info
+      run: |
+        set -e
+        echo "package-name=$(jq -r '.name' sfdx-project.json)" >> $GITHUB_OUTPUT
+        echo "package-namespace=$(jq -r '.namespace' sfdx-project.json)" >> $GITHUB_OUTPUT
+        echo "subscriber-package-id=$(jq -r '.plugins.subscriberPackageId' sfdx-project.json)" >> $GITHUB_OUTPUT
+        echo "sfdx-project-json=$(jq . -cr sfdx-project.json)" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Print Package Info
+      run: |
+        echo "PACKAGE_NAME: $PACKAGE_NAME"
+        echo "PACKAGE_NAMESPACE: $PACKAGE_NAMESPACE"
+        echo "SUBSCRIBER_PACKAGE_ID: $SUBSCRIBER_PACKAGE_ID"
+        echo "SFDX_PROJECT_JSON: $SFDX_PROJECT_JSON"
+      env:
+        PACKAGE_NAME: ${{ steps.get-package-info.outputs.package-name }}
+        PACKAGE_NAMESPACE: ${{ steps.get-package-info.outputs.package-namespace }}
+        SUBSCRIBER_PACKAGE_ID: ${{ steps.get-package-info.outputs.subscriber-package-id }}
+        SFDX_PROJECT_JSON: ${{ steps.get-package-info.outputs.sfdx-project-json }}
+      shell: bash
